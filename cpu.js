@@ -37,6 +37,7 @@ class CPU {
     this.PC = 0;
     this.code = null
     this.prevcode = null;
+    this.totalCycles = 0;
     this.cycles = 0;
     this.IMEScheduled = -1;
     this.IMEEnabled = false;
@@ -50,7 +51,7 @@ class CPU {
   }
 
   writeByte(loc, value) {
-    this.cycles += this.mmu.writeByte(loc, value);
+    return this.mmu.writeByte(loc, value);
   }
 
   nextByte() {
@@ -95,6 +96,21 @@ class CPU {
     this.writeByte(this.SP, val & 0xff);
     this.SP--;
   }
+
+  incHL() {
+    let val = uint16(this.H, this.L);
+    val++;
+    this.H = val >> 8;
+    this.L = val & 0xff;
+  }
+
+  decHL() {
+    let val = uint16(this.H, this.L);
+    val--;
+    this.H = val >> 8;
+    this.L = val & 0xff;
+  }
+
 
   PUSH(hi, lo) {
     this.pushStack(uint16(hi, lo));
@@ -428,21 +444,14 @@ class CPU {
   }
 
   // Addition
-  ADD(a, b, subtract=false) {
-    let val;
+  ADD(a, b) {
+    let val = a + b;
 
     this.F &= ~Z_FLAG;
     this.F &= ~H_FLAG;
     this.F &= ~C_FLAG;
+    this.F &= ~N_FLAG;
 
-    if (subtract) {
-      this.F &= ~N_FLAG;
-      val = a - b;
-    }
-    else {
-      this.F |= N_FLAG;
-      val = a + b;
-    }
     if ((val & 0xff) === 0) {
       this.F |= Z_FLAG;
     }
@@ -457,7 +466,23 @@ class CPU {
 
   // Subtraction
   SUB(a, b) {
-    return this.ADD(a, b, true);
+    let val = a - b;
+
+    this.F &= ~Z_FLAG;
+    this.F &= ~H_FLAG;
+    this.F &= ~C_FLAG;
+    this.F |= N_FLAG;
+
+    if (val < 0) {
+      this.F |= C_FLAG;
+    }
+    if (isHalfCarry(a, -b)) {
+      this.F |= H_FLAG;
+    }
+    if (a === b) {
+      this.F |= Z_FLAG;
+    }
+    return val & 0xff;
   }
 
   // Restart command - jump to preset address
@@ -468,8 +493,7 @@ class CPU {
 
   // Subtraction from A that sets flags without modifying A
   CP(n) {
-    this.SUB(this.A, n);
-    return n;
+    return this.SUB(this.A, n);
   }
 
   // Flip bits in A register, set N and H flags
@@ -578,7 +602,7 @@ class CPU {
       // 0x22  LD (HL+),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x22:
         this.writeByte(uint16(this.H, this.L), this.A);
-        [this.H, this.L] = this.INC16(this.H, this.L);
+        this.incHL();
         this.cycles += 8;
         break;
 
@@ -743,7 +767,7 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x0e  LD C,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
+     // 0x0e  LD C,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
       case 0x0e:
         this.C = this.read("d8");
         this.cycles += 8;
@@ -991,7 +1015,7 @@ class CPU {
       // 0x2a  LD A,(HL+)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x2a:
         this.A = this.readByte(uint16(this.H, this.L));
-        [this.H, this.L] = this.INC16(this.H, this.L);
+        this.incHL();
         break;
 
       // 0xfa  LD A,(a16)  length: 3  cycles: 16  flags: ----  group: x8/lsm
@@ -1015,7 +1039,7 @@ class CPU {
       // 0x32  LD (HL-),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x32:
         this.writeByte(uint16(this.H, this.L), this.A);
-        [this.H, this.L] = this.DEC16(this.H, this.L);
+        this.decHL();
         this.cycles += 8;
         break;
 
@@ -1366,6 +1390,7 @@ class CPU {
     this.execute(this.code);
     this.updateIME();
     this.updateInterrupts();
+    this.totalCycles += this.cycles;
     return this.cycles;
   }
 }
