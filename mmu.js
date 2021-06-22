@@ -55,32 +55,31 @@ class MMU {
     return this.resolve(loc)[loc];
   }
 
-  DMATransfer(value) {
+  OAMDMATransfer(value) {
     let src = value << 8;
     let dst = 0xfe00;
-    let end = dst + 0x9f;
-
-    while (dst <= end) {
-      this.resolve(dst)[dst] = src;
-      src++;
-      dst++;
+    for (var n = 0; n < 160; n++) {
+      if (dst == OAM_DMA_REG) {
+        throw new Error("Invalid address for DMA transfer: " + loc);
+      }
+      this.writeByte(dst + n, this.readByte(src + n));
     }
   }
 
   writeByte(loc, value) {
     let cycles = 0;
     if (loc == OAM_DMA_REG) {
-      this.DMATransfer(value);
+      this.OAMDMATransfer(value);
       cycles = 160; // DMA Transfer takes 160 cycles
     }
     else if (loc == JOYP_REG) {
-      return;
     }
     else if (loc >= 0 && loc <= 0x7fff) {
       console.log(loc + " is read only");
-      return;
     }
-    this.resolve(loc)[loc] = value;
+    else { 
+      this.resolve(loc)[loc] = value;
+    }
     return cycles;
   }
 }

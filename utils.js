@@ -21,6 +21,19 @@ function recordCall(reg, code, cycles) {
       H: reg.H, L: reg.L, 
     })
 }
+
+function printStack(n=10) {
+  let sp = dmg.cpu.SP;
+  while (n >= 0) {
+    sp++;
+    let lo = dmg.mmu.readByte(sp);
+    sp++;
+    let hi = dmg.mmu.readByte(sp);
+    console.log("SP=" + sp + " value=" + uint16(hi, lo) + " hex=" + hexify(uint16(hi, lo)) + " hi=" + hi + " lo=" + lo);
+    n--;
+  }
+}
+    
     
 function printCalls(start=0, count=25) {
   if (start === 0) {
