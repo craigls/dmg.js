@@ -42,6 +42,12 @@ class CPU {
     this.cycles = 0;
     this.IMEScheduled = -1;
     this.IMEEnabled = false;
+
+    // Lookup tables used when decoding certain instructions 
+    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
+    this.rp = ["BC", "DE", "HL", "SP"];
+    this.rp2 = ["BC", "DE", "HL", "AF"];
   }
 
   reset() {
@@ -57,6 +63,17 @@ class CPU {
 
   nextByte() {
     return this.readByte(this.PC++);
+  }
+
+  decode(code) {
+    let x = (code & 0b11000000) >> 6;
+    let y = (code & 0b00111000) >> 3;
+    let z = (code & 0b00000111);
+    let p = y >> 1;
+    let q = y % 2;
+    
+    return {x: x, y: y, z: z, p: p, q: q};
+
   }
 
   read(param) {
@@ -78,6 +95,9 @@ class CPU {
       case "r8":
         return tcBin2Dec(this.nextByte());
 
+      case "(HL)":
+        return this.readByte(this.HL());
+
       default:
         throw new Error("Unknown operand: " + param);
     }
@@ -98,15 +118,19 @@ class CPU {
     this.SP--;
   }
 
+  HL() {
+    return uint16(this.H, this.L);
+  }
+
   incHL() {
-    let val = uint16(this.H, this.L);
+    let val = this.HL();
     val++;
     this.H = val >> 8;
     this.L = val & 0xff;
   }
 
   decHL() {
-    let val = uint16(this.H, this.L);
+    let val = this.HL();
     val--;
     this.H = val >> 8;
     this.L = val & 0xff;
@@ -147,6 +171,27 @@ class CPU {
     return cycles;
   }
 
+  // Jump if zero
+  JPZ(addr) {
+    let cycles = 12;
+    if (this.F & Z_FLAG) {
+      this.PC = addr;
+      cycles += 4;
+    }
+    return cycles;
+  }
+
+  // Jump if not zero
+  JPNZ(addr) {
+    let cycles = 12;
+    if (! (this.F & Z_FLAG)) {
+      this.PC = addr;
+      cycles += 4;
+    }
+    return cycles;
+  }
+
+
   // Jump relative if not zero
   JRNZ(offset) {
     let cycles = 8;
@@ -160,7 +205,7 @@ class CPU {
   // Jump relative if not carry
   JRNC(offset) {
     let cycles = 8;
-    if (! (this.C & Z_FLAG)) {
+    if (! (this.F & C_FLAG)) {
       this.PC += offset;
       cycles += 4;
     }
@@ -174,10 +219,20 @@ class CPU {
     return cycles;
   }
 
-  // Jump if zero
-  JPZ(addr) {
-    let cycles = 12;
-    if (this.F & Z_FLAG) {
+  // Jump if not carry
+  JPNC(addr) {
+    let cycles = 8;
+    if (! (this.F & C_FLAG)) {
+      this.PC = addr;
+      cycles += 4;
+    }
+    return cycles;
+  }
+
+  // Jump if carry
+  JPC(addr) {
+    let cycles = 8;
+    if (this.F & C_FLAG) {
       this.PC = addr;
       cycles += 4;
     }
@@ -192,13 +247,38 @@ class CPU {
     return cycles;
   }
 
+  // Call if zero
+  CALLZ(addr) {
+    let cycles = 12;
+    if (this.F & Z_FLAG) {
+      return this.CALL(addr);
+    }
+    return cycles;
+  }
+
   // Call if not zero
   CALLNZ(addr) {
     let cycles = 12;
     if (! (this.F & Z_FLAG)) {
-      this.pushStack(this.PC);
-      this.PC = addr;
-      cycles += 12;
+      return this.CALL(addr);
+    }
+    return cycles;
+  }
+
+  // Call if carry
+  CALLC(addr) {
+    let cycles = 12;
+    if (this.F & C_FLAG) {
+      return this.CALL(addr);
+    }
+    return cycles;
+  }
+
+  // Call if not carry
+  CALLNC(addr) {
+    let cycles = 12;
+    if (! (this.F & C_FLAG)) {
+      return this.CALL(addr);
     }
     return cycles;
   }
@@ -279,6 +359,10 @@ class CPU {
       this.F |= Z_FLAG;
     }
     return num;
+  }
+
+  RES(bit, num) {
+    return num & ~(0 << bit);
   }
 
   // AND
@@ -385,7 +469,7 @@ class CPU {
     this.F &= ~H_FLAG;
 
     if ((n & (1 << 0)) !== 0) {
-      this.F &= C_FLAG;
+      this.F |= C_FLAG;
     }
     if (val === 0) {
       this.F |= Z_FLAG;
@@ -404,7 +488,7 @@ class CPU {
     this.F &= ~H_FLAG;
 
     if ((n & (1 << 0)) !== 0) {
-      this.F &= C_FLAG;
+      this.F |= C_FLAG;
     }
     if (val === 0) {
       this.F |= Z_FLAG;
@@ -517,7 +601,9 @@ class CPU {
     return this.ADD(a, b + carry);
   }
 
-  ADD16(a, b, subtract=false) {
+  ADD16(a1, a2, b1, b2) {
+    let a = uint16(a1, a2);
+    let b = uint16(b1, b2); 
     let lo = this.ADD(a & 0xff, b & 0xff);
     let hi = this.ADD(a >> 8, b >> 8);
     this.F &= ~Z_FLAG;
@@ -566,6 +652,10 @@ class CPU {
     return val & 0xff;
   }
 
+  SBC(a, b) {
+    return this.SUB(a, b + (this.F & C_FLAG) ? 1 : 0);
+  }
+
   // Restart command - jump to preset address
   RST(loc) {
     this.pushStack(this.PC);
@@ -604,6 +694,10 @@ class CPU {
 
   // Execute instructions
   execute(code) {
+    let op = this.decode(code);
+    let r1;
+    let r2;
+
     // TODO: Eliminate giant switch statement
 
     switch(code) {
@@ -620,30 +714,48 @@ class CPU {
         this.cycles += 12;
         break;
 
-      // 0x03  INC BC  length: 1  cycles: 8  flags: ----  group: x16/alu
-      case 0x03:
-        [this.B, this.C] = this.INC16(this.B, this.C);
-        this.cycles += 8;
-        break;
-
-      // 0x04  INC B  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x04:
-        this.B = this.INC(this.B);
+      case 0x04: // 0x04  INC B  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x14: // 0x14  INC D  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x1c: // 0x1c  INC E  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x2c: // 0x2c  INC L  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x24: // 0x24  INC H  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x3c: // 0x3c  INC A  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x0c: // 0x0c  INC C  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+        r1 = this.r[op.y];
+        this[r1] = this.INC(this[r1]);
         this.cycles += 4;
         break;
 
       // 0x09  ADD HL,BC  length: 1  cycles: 8  flags: -0HC  group: x16/alu
       case 0x09:
-        [this.H, this.L] = this.ADD16(
-          uint16(this.H, this.L), 
-          uint16(this.B, this.C)
-        );
+        [this.H, this.L] = this.ADD16(this.H, this.L, this.B, this.C);
         this.cycles += 8;
         break;
 
-      // 0x0b  DEC BC  length: 1  cycles: 8  flags: ----  group: x16/alu
-      case 0x0b:
-        [this.B, this.C] = this.DEC16(uint16(this.B, this.C));
+      // 0x19  ADD HL,DE  length: 1  cycles: 8  flags: -0HC  group: x16/alu
+      case 0x19:
+        [this.H, this.L] = this.ADD16(this.H, this.L, this.D, this.E);
+        this.cycles += 8;
+        break;
+
+      // 0x29  ADD HL,HL  length: 1  cycles: 8  flags: -0HC  group: x16/alu
+      case 0x29:
+        [this.H, this.L] = this.ADD16(this.H, this.L, this.H, this.L);
+        this.cycles += 8;
+        break;
+
+      case 0x0b: // 0x0b  DEC BC  length: 1  cycles: 8  flags: ----  group: x16/alu
+        [this.B, this.C] = this.DEC16(this.B, this.C);
+        this.cycles += 8;
+        break;
+
+      case 0x1b: // 0x1b  DEC DE  length: 1  cycles: 8  flags: ----  group: x16/alu
+        [this.D, this.E] = this.DEC16(this.D, this.E);
+        this.cycles += 8;
+        break;
+
+      case 0x2b: // 0x2b  DEC HL  length: 1  cycles: 8  flags: ----  group: x16/alu
+        [this.H, this.L] = this.DEC16(this.H, this.L);
         this.cycles += 8;
         break;
 
@@ -659,19 +771,6 @@ class CPU {
         this.D = this.nextByte();
         this.cycles += 12;
         break;
-
-      // 0x14  INC D  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x14:
-        this.D = this.INC(this.D);
-        this.cycles += 4;
-        break;
-
-
-      // 0x19  ADD HL,DE  length: 1  cycles: 8  flags: -0HC  group: x16/alu
-      case 0x19:
-        [this.H, this.L] = this.ADD16(uint16(this.H, this.L), uint16(this.D, this.E));
-        this.cycles += 8;
-        break
 
       // 0x1a  LD A,(DE)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x1a:
@@ -702,7 +801,7 @@ class CPU {
 
       // 0x22  LD (HL+),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x22:
-        this.writeByte(uint16(this.H, this.L), this.A);
+        this.writeByte(this.HL(), this.A);
         this.incHL();
         this.cycles += 8;
         break;
@@ -718,6 +817,11 @@ class CPU {
         this.cycles += this.JP(this.read("a16"));
         break;
 
+      // 0xcc  CALL Z,a16  length: 3  cycles: 24,12  flags: ----  group: control/br
+      case 0xcc:
+        this.cycles += this.CALLZ(this.read("a16"));
+        break;
+
       // 0xcd  CALL a16  length: 3  cycles: 24  flags: ----  group: control/br
       case 0xcd:
         this.cycles += this.CALL(this.read("a16"));
@@ -726,6 +830,16 @@ class CPU {
       // 0xc4  CALL NZ,a16  length: 3  cycles: 24,12  flags: ----  group: control/br
       case 0xc4:
         this.cycles += this.CALLNZ(this.read("a16"));
+        break;
+
+      // 0xdc  CALL C,a16  length: 3  cycles: 24,12  flags: ----  group: control/br
+      case 0xdc:
+        this.cycles += this.CALLC(this.read("a16"));
+        break;
+
+      // 0xd4  CALL NC,a16  length: 3  cycles: 24,12  flags: ----  group: control/br
+      case 0xd4:
+        this.cycles += this.CALLNC(this.read("a16"));
         break;
 
       // 0xc6  ADD A,d8  length: 2  cycles: 8  flags: Z0HC  group: x8/alu
@@ -761,8 +875,45 @@ class CPU {
         break;
 
       // 0xc1  POP BC  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xc1:
+      case 0xc1: 
         [this.B, this.C] = this.POP();
+        this.cycles += 12;
+        break;
+
+      // 0xc2  JP NZ,a16  length: 3  cycles: 16,12  flags: ----  group: control/br
+      case 0xc2:
+        this.cycles += this.JPNZ(this.read("a16"));
+        break;
+
+      // 0xd1  POP DE  length: 1  cycles: 12  flags: ----  group: x16/lsm
+      case 0xd1: 
+        [this.D, this.E] = this.POP();
+        this.cycles += 12;
+        break;
+
+      // 0xd2  JP NC,a16  length: 3  cycles: 16,12  flags: ----  group: control/br
+      case 0xd2:
+        this.cycles += this.JPNC(this.read("a16"));
+        // Not implemented
+        break;
+
+      // 0xda  JP C,a16  length: 3  cycles: 16,12  flags: ----  group: control/br
+      case 0xda:
+        this.cycles += this.JPC(this.read("a16"));
+        break;
+
+      // 0xe1  POP HL  length: 1  cycles: 12  flags: ----  group: x16/lsm
+      case 0xe1: 
+        [this.H, this.L] = this.POP();
+        this.cycles += 12;
+        break;
+
+      // 0xf1  POP AF  length: 1  cycles: 12  flags: ZNHC  group: x16/lsm
+      case 0xf1:
+        // TODO: confirm correct behavior
+        let tmpF;
+        [this.A, tmpF] = this.POP();
+        this.F = this.ADD(this.F, tmpF) & 0xf0;
         this.cycles += 12;
         break;
 
@@ -772,21 +923,21 @@ class CPU {
         this.cycles += 8;
         break;
 
-      // 0xef  RST 28H  length: 1  cycles: 16  flags: ----  group: control/br
-      case 0xef:
-        this.RST(0x28);
+      case 0xc7: // 0xc7  RST 00H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xcf: // 0xcf  RST 08H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xd7: // 0xd7  RST 10H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xdf: // 0xdf  RST 18H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xe7: // 0xe7  RST 20H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xef: // 0xef  RST 28H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xf7: // 0xf7  RST 30H  length: 1  cycles: 16  flags: ----  group: control/br
+      case 0xff: // 0xff  RST 38H  length: 1  cycles: 16  flags: ----  group: control/br
+        this.RST(op.y * 8);
         this.cycles += 16;
         break;
 
       // 0xd0  RET NC  length: 1  cycles: 20,8  flags: ----  group: control/br
       case 0xd0:
         this.cycles += this.RETNC();
-        break;
-
-      // 0xd1  POP DE  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xd1:
-        [this.D, this.E] = this.POP();
-        this.cycles += 12;
         break;
 
       // 0xd6  SUB d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
@@ -805,21 +956,6 @@ class CPU {
         this.cycles += this.RETI();
         break;
 
-      // 0xe1  POP HL  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xe1:
-        [this.H, this.L] = this.POP();
-        this.cycles += 12;
-        break;
-
-      // 0xf1  POP AF  length: 1  cycles: 12  flags: ZNHC  group: x16/lsm
-      case 0xf1:
-        // TODO: confirm correct behavior
-        let tmpF;
-        [this.A, tmpF] = this.POP();
-        this.F = this.ADD(this.F, tmpF) & 0xf0;
-        this.cycles += 12;
-        break;
-
       // 0xf3  DI  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0xf3:
         // TODO: Disable interrupt 
@@ -829,7 +965,7 @@ class CPU {
 
       // 0xf9  LD SP,HL  length: 1  cycles: 8  flags: ----  group: x16/lsm
       case 0xf9:
-        this.SP = uint16(this.H, this.L);
+        this.SP = this.HL();
         this.cycles += 8;
         break;
 
@@ -844,26 +980,22 @@ class CPU {
         this.cycles += this.JPZ(this.read("a16"));
         break;
 
-      // 0xc5  PUSH BC  length: 1  cycles: 16  flags: ----  group: x16/lsm
-      case 0xc5:
+      case 0xc5: // 0xc5  PUSH BC  length: 1  cycles: 16  flags: ----  group: x16/lsm
         this.PUSH(this.B, this.C);
         this.cycles += 16;
         break;
- 
-      // 0xd5  PUSH DE  length: 1  cycles: 16  flags: ----  group: x16/lsm
-      case 0xd5:
-        this.PUSH(this.E, this.E);
+
+      case 0xd5: // 0xd5  PUSH DE  length: 1  cycles: 16  flags: ----  group: x16/lsm
+        this.PUSH(this.D, this.E);
         this.cycles += 16;
         break;
 
-      // 0xe5  PUSH HL  length: 1  cycles: 16  flags: ----  group: x16/lsm
-      case 0xe5:
+      case 0xe5: // 0xe5  PUSH HL  length: 1  cycles: 16  flags: ----  group: x16/lsm
         this.PUSH(this.H, this.L);
         this.cycles += 16;
         break;
 
-      // 0xf5  PUSH AF  length: 1  cycles: 16  flags: ----  group: x16/lsm
-      case 0xf5:
+      case 0xf5: // 0xf5  PUSH AF  length: 1  cycles: 16  flags: ----  group: x16/lsm
         this.PUSH(this.A, this.F);
         this.cycles += 16;
         break;
@@ -874,25 +1006,19 @@ class CPU {
         this.cycles += 8;
         break;
 
-      // 0x05  DEC B  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x05:
-        this.B = this.DEC(this.B);
+      case 0x3d: // 0x3d  DEC A  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x05: // 0x05  DEC B  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x0d: // 0x0d  DEC C  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x15: // 0x15  DEC D  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x1d: // 0x1d  DEC E  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x25: // 0x25  DEC H  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+      case 0x2d: // 0x2d  DEC L  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
+        r1 = this.r[op.y];
+        this[r1] = this.DEC(this[r1]);
         this.cycles += 4;
         break;
 
-      // 0x0c  INC C  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x0c:
-        this.C = this.INC(this.C);
-        this.cycles += 4;
-        break;
-
-      // 0x0d  DEC C  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x0d:
-        this.C = this.DEC(this.C);
-        this.cycles += 4;
-        break;
-
-     // 0x0e  LD C,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
+      // 0x0e  LD C,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
       case 0x0e:
         this.C = this.read("d8");
         this.cycles += 8;
@@ -910,52 +1036,22 @@ class CPU {
         this.cycles += 12;
         break;
 
-      // 0xa0  AND B  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa0:
-        this.A = this.AND(this.B);
-        this.cycles += 4;
-        break;
-       
-      // 0xa1  AND C  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa1:
-        this.A = this.AND(this.C);
-        this.cycles += 4;
-        break;
-       
-      // 0xa2  AND D  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa2:
-        this.A = this.AND(this.D);
-        this.cycles += 4;
-        break;
-       
-      // 0xa3  AND E  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa3:
-        this.A = this.AND(this.E);
-        this.cycles += 4;
-        break;
-       
-      // 0xa4  AND H  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa4:
-        this.A = this.AND(this.H);
-        this.cycles += 4;
-        break;
-
-      // 0xa5  AND L  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa5:
-        this.A = this.AND(this.L);
+      case 0xa0: // 0xa0  AND B  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa1: // 0xa1  AND C  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa2: // 0xa2  AND D  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa3: // 0xa3  AND E  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa4: // 0xa4  AND H  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa5: // 0xa5  AND L  length: 1  cycles: 4  flags: Z010  group: x8/alu
+      case 0xa7: // 0xa7  AND A  length: 1  cycles: 4  flags: Z010  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.AND(this[r1]);
         this.cycles += 4;
         break;
 
       // 0xa6  AND (HL)  length: 1  cycles: 8  flags: Z010  group: x8/alu
       case 0xa6:
-        this.A = this.readByte(uint16(this.H, this.L));
+        this.A = this.readByte(this.HL());
         this.cycles += 8;
-        break;
-
-      // 0xa7  AND A  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa7:
-        this.A = this.AND(this.A);
-        this.cycles += 4;
         break;
 
       // 0x0a  LD A,(BC)  length: 1  cycles: 8  flags: ----  group: x8/lsm
@@ -964,21 +1060,9 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0xad  XOR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xad:
-        this.L = this.XOR(this.L);
-        this.cycles += 4;
-        break;
-
       // 0xe2  LD (C),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0xe2:
         this.writeByte(this.read("(C)"), this.A);
-        this.cycles += 8;
-        break;
-
-      // 0xe6  AND d8  length: 2  cycles: 8  flags: Z010  group: x8/alu
-      case 0xe6:
-        this.A = this.AND(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -991,7 +1075,7 @@ class CPU {
 
       // 0xe9  JP (HL)  length: 1  cycles: 4  flags: ----  group: control/br
       case 0xe9:
-        this.cycles += this.JP(uint16(this.H, this.L));
+        this.cycles += this.JP(this.HL());
         break;
 
       // 0x31  LD SP,d16  length: 3  cycles: 12  flags: ----  group: x16/lsm
@@ -1002,16 +1086,13 @@ class CPU {
 
       // 0x35  DEC (HL)  length: 1  cycles: 12  flags: Z1H-  group: x8/alu
       case 0x35:
-        this.writeByte(
-          uint16(this.H, this.L), 
-          this.DEC(this.readByte(uint16(this.H, this.L)))
-        );
+        this.writeByte(this.HL(), this.DEC(this.readByte(this.HL())));
         this.cycles += 12;
         break;
 
       // 0x36  LD (HL),d8  length: 2  cycles: 12  flags: ----  group: x8/lsm
       case 0x36:
-        this.writeByte(uint16(this.H, this.L), this.read("d8"));
+        this.writeByte(this.HL(), this.read("d8"));
         this.cycles += 12;
         break;
 
@@ -1021,149 +1102,51 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0xa1  AND C  length: 1  cycles: 4  flags: Z010  group: x8/alu
-      case 0xa1:
-        this.A = this.AND(this.C);
-        this.cycles += 4;
-        break;
-
-      // 0xa8  XOR B  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xa8:
-        this.A = this.XOR(this.B);
-        this.cycles += 4;
-        break;
-       
-      // 0xa9  XOR C  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xa9:
-        this.A = this.XOR(this.C);
-        this.cycles += 4;
-        break;
-
-      // 0xaa  XOR D  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xaa:
-        this.A = this.XOR(this.D);
-        this.cycles += 4;
-        break;
-       
-      // 0xab  XOR E  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xab:
-        this.A = this.XOR(this.E);
-        this.cycles += 4;
-        break;
-       
-      // 0xac  XOR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xac:
-        // Not implemented
-        this.A = this.XOR(this.H);
-        this.cycles += 4;
-        break;
-       
-      // 0xad  XOR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xad:
-        this.A = this.XOR(this.L);
+      case 0xa8: // 0xa8  XOR B  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xa9: // 0xa9  XOR C  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xaa: // 0xaa  XOR D  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xab: // 0xab  XOR E  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xac: // 0xac  XOR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xad: // 0xad  XOR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xaf: // 0xaf  XOR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.XOR(this[r1]);
         this.cycles += 4;
         break;
 
       // 0xae  XOR (HL)  length: 1  cycles: 8  flags: Z000  group: x8/alu
       case 0xae:
-        this.A = this.XOR(this.readByte(uint16(this.H, this.L)));
+        this.A = this.XOR(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
-      // 0xaf  XOR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xaf: 
-        this.A = this.XOR(this.A);
-        this.cycles += 4;
-        break;
-
-      // 0xb0  OR B  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb0:
-        this.A = this.OR(this.B);
-        this.cycles += 4;
-        break;
-
-      // 0xb1  OR C  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb1:
-        this.A = this.OR(this.C);
-        this.cycles += 4;
-        break;
-
-      // 0xb2  OR D  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb2:
-        // Not implemented
-        this.A = this.OR(this.D);
-        this.cycles += 4;
-        break;
-       
-      // 0xb3  OR E  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb3:
-        this.A = this.OR(this.E);
-        this.cycles += 4;
-        break;
-
-      // 0xb4  OR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb4:
-        this.A = this.OR(this.H);
-        this.cycles += 4;
-        break;
-
-      // 0xb5  OR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb5:
-        this.A = this.OR(this.L);
+      case 0xb0: // 0xb0  OR B  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb1: // 0xb1  OR C  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb2: // 0xb2  OR D  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb3: // 0xb3  OR E  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb4: // 0xb4  OR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb5: // 0xb5  OR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
+      case 0xb7: // 0xb7  OR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.OR(this[r1]);
         this.cycles += 4;
         break;
 
       // 0xb6  OR (HL)  length: 1  cycles: 8  flags: Z000  group: x8/alu
       case 0xb6:
-        this.A = this.OR(this.readByte(uint16(this.H, this.L)));
+        this.A = this.OR(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
-      // 0xb7  OR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
-      case 0xb7:
-        this.A = this.OR(this.A);
-        this.cycles += 4;
-        break;
-
-      // 0xb8  CP B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xb8:
-        this.CP(this.B);
-        this.cycles += 4;
-        break;
-
-      // 0xb9  CP C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xb9:
-        this.CP(this.C);
-        this.cycles += 4;
-        break;
-
-      // 0xba  CP D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xba:
-        this.CP(this.D);
-        this.cycles += 4;
-        break;
-
-      // 0xbb  CP E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xbb:
-        this.CP(this.E);
-        this.cycles += 4;
-        break;
-
-      // 0xbc  CP H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xbc:
-        this.CP(this.H);
-        this.cycles += 4;
-        break;
-
-      // 0xbd  CP L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xbd:
-        this.CP(this.L);
-        this.cycles += 4;
-        break;
-
-      // 0xbf  CP A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0xbf:
-        this.CP(this.A);
+      case 0xb8: // 0xb8  CP B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xb9: // 0xb9  CP C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xba: // 0xba  CP D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xbb: // 0xbb  CP E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xbc: // 0xbc  CP H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xbd: // 0xbd  CP L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0xbf: // 0xbf  CP A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.CP(this[r1]);
         this.cycles += 4;
         break;
 
@@ -1182,27 +1165,14 @@ class CPU {
         this.cycles += this.RET();
         break;
 
-      // 0xce  ADC A,d8  length: 2  cycles: 8  flags: Z0HC  group: x8/alu
-      case 0xce:
+      case 0xce: // 0xce  ADC A,d8  length: 2  cycles: 8  flags: Z0HC  group: x8/alu
         this.A = this.ADC(this.A, this.read("d8"));
         this.cycles += 8;
         break;
 
-      // 0x8c  ADC A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x8c:
-        this.A = this.ADC(this.A, this.H);
-        this.cycles += 4;
-        break;
-
       // 0x8e  ADC A,(HL)  length: 1  cycles: 8  flags: Z0HC  group: x8/alu
       case 0x8e:
-        this.A = this.ADC(this.readByte(uint16(this.H, this.L)));
-        this.cycles += 4;
-        break;
-
-      // 0x8f  ADC A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x8f:
-        this.A = this.ADC(this.A, this.A);
+        this.A = this.ADC(this.readByte(this.HL()));
         this.cycles += 4;
         break;
 
@@ -1212,51 +1182,15 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x15  DEC D  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x15:
-        this.D = this.DEC(this.D);
-        this.cycles += 4;
-        break;
-
       // 0x16  LD D,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
       case 0x16:
         this.D = this.read("d8");
         this.cycles += 8;
         break;
 
-      // 0x1b  DEC DE  length: 1  cycles: 8  flags: ----  group: x16/alu
-      case 0x1b:
-        [this.D, this.E] = this.DEC16(this.D, this.E);
-        this.cycles += 8;
-        break;
-
-      // 0x1c  INC E  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x1c:
-        this.E = this.INC(this.E)
-        this.cycles += 4;
-        break;
-
-      // 0x25  DEC H  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x25:
-        this.H = this.DEC(this.H);
-        this.cycles += 4;
-        break;
-
-      // 0x2c  INC L  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x2c:
-        this.L = this.INC(this.L);
-        this.cycles += 4;
-        break;
-
-      // 0x3c  INC A  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x3c:
-        this.A = this.INC(this.A);
-        this.cycles += 4;
-        break;
-
       // 0xbe  CP (HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
       case 0xbe:
-        this.CP(this.readByte(uint16(this.H, this.L)));
+        this.CP(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
@@ -1275,20 +1209,15 @@ class CPU {
 
       // 0x2a  LD A,(HL+)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x2a:
-        this.A = this.readByte(uint16(this.H, this.L));
+        this.A = this.readByte(this.HL());
         this.incHL();
+        this.cycles += 8;
         break;
 
       // 0xfa  LD A,(a16)  length: 3  cycles: 16  flags: ----  group: x8/lsm
       case 0xfa:
         this.A = this.readByte(this.read("a16"));
         this.cycles += 16;
-        break;
-
-      // 0x2d  DEC L  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x2d:
-        this.L = this.DEC(this.L);
-        this.cycles += 4;
         break;
 
       // 0x2e  LD L,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
@@ -1299,15 +1228,16 @@ class CPU {
 
       // 0x32  LD (HL-),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x32:
-        this.writeByte(uint16(this.H, this.L), this.A);
+        this.writeByte(this.HL(), this.A);
         this.decHL();
         this.cycles += 8;
         break;
 
-      // 0x3d  DEC A  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x3d:
-        this.A = this.DEC(this.A);
-        this.cycles += 4;
+      // 0x3a  LD A,(HL-)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x3a:
+        this.A = this.readByte(this.HL());
+        this.decHL();
+        this.cycles += 8;
         break;
 
       // 0x3e  LD A,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
@@ -1322,311 +1252,122 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      /*
-      case 0x40:
-        this.B = this.B;
+      case 0x40: // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x41: // 0x41  LD B,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x42: // 0x42  LD B,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x43: // 0x43  LD B,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x44: // 0x44  LD B,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x45: // 0x45  LD B,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x47: // 0x47  LD B,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x48: // 0x48  LD C,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x49: // 0x49  LD C,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x4a: // 0x4a  LD C,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x4b: // 0x4b  LD C,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x4c: // 0x4c  LD C,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x5a: // 0x5a  LD E,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x5d: // 0x5d  LD E,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x5f: // 0x5f  LD E,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x57: // 0x57  LD D,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x67: // 0x67  LD H,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6b: // 0x6b  LD L,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6f: // 0x6f  LD L,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x68: // 0x68  LD L,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x78: // 0x78  LD A,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x79: // 0x79  LD A,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7d: // 0x7d  LD A,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7a: // 0x7a  LD A,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7c: // 0x7c  LD A,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7b: // 0x7b  LD A,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+        r1 = this.r[op.y];
+        r2 = this.r[op.z];
+        this[r1] = this[r2];
         this.cycles += 4;
         break;
-      */
 
-      // 0x44  LD B,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x44:
-        this.B = this.H;
-        this.cycles += 4;
-        break;
-
-      // 0x46  LD B,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x46:
-        this.B = this.readByte(uint16(this.H, this.L));
+      case 0x46: // 0x46  LD B,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x4e: // 0x4e  LD C,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x56: // 0x56  LD D,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x5e: // 0x5e  LD E,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x6e: // 0x6e  LD L,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x7e: // 0x7e  LD A,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+        r1 = this.r[op.y];
+        this[r1] = this.readByte(this.HL());
         this.cycles += 8;
         break;
 
-      // 0x47  LD B,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x47:
-        this.B = this.A;
-        this.cycles += 4;
-        break;
-
-    // 0x4e  LD C,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x4e:
-        this.C = this.readByte(uint16(this.H, this.L));
+      case 0x70: // 0x70  LD (HL),B  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x71: // 0x71  LD (HL),C  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x72: // 0x72  LD (HL),D  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x73: // 0x73  LD (HL),E  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x77: // 0x77  LD (HL),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
+        r1 = this.r[op.z];
+        this.writeByte(this.HL(), this[r1]);
         this.cycles += 8;
         break;
 
-      // 0x5a  LD E,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x5a:
-        this.E = this.D;
-        this.cycles += 4;
-        break;
-
-      // 0x5d  LD E,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x5d:
-        this.E = this.L;
-        this.cycles += 4;
-        break;
-
-      // 0x56  LD D,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x56:
-        this.D = this.readByte(uint16(this.H, this.L));
+      case 0x80: // 0x80  ADD A,B  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x81: // 0x81  ADD A,C  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x82: // 0x82  ADD A,D  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x83: // 0x83  ADD A,E  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x84: // 0x84  ADD A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x85: // 0x85  ADD A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x87: // 0x87  ADD A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.ADD(this.A, this[r1]);
         this.cycles += 8;
-        break;
-
-      // 0x57  LD D,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x57:
-        this.D = this.A;
-        this.cycles += 4;
-        break;
-
-      // 0x5e  LD E,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x5e:
-        this.E = this.readByte(uint16(this.H, this.L));
-        this.cycles += 8;
-        break;
-
-      // 0x5f  LD E,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x5f:
-        this.E = this.A;
-        this.cycles += 4;
-        break;
-
-      // 0x67  LD H,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x67:
-        this.H = this.A;
-        this.cycles += 4;
-        break;
-
-      // 0x6e  LD L,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x6e:
-        this.L = this.readByte(uint16(this.H, this.L));
-        break;
-
-      // 0x6f  LD L,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x6f:
-        this.L = this.A;
-        this.cycles += 4;
-        break;
-
-      // 0x70  LD (HL),B  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x70:
-        this.writeByte(uint16(this.H, this.L), this.B);
-        this.cycles += 8;
-        break;
-
-      // 0x71  LD (HL),C  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x71:
-        this.writeByte(uint16(this.H, this.L), this.C);
-        this.cycles += 8;
-        break;
-      
-      // 0x72  LD (HL),D  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x72:
-        this.writeByte(uint16(this.H, this.L), this.D);
-        this.cycles += 8;
-        break;
-
-      // 0x73  LD (HL),E  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x73:
-        this.writeByte(uint16(this.H, this.L), this.E);
-        this.cycles += 8;
-        break;
-
-      // 0x77  LD (HL),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x77:
-        this.writeByte(uint16(this.H, this.L), this.A);
-        this.cycles += 8;
-        break;
-
-      // 0x78  LD A,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x78:
-        this.A = this.B;
-        this.cycles += 4;
-        break;
-
-      // 0x79  LD A,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x79:
-        this.A = this.C;
-        this.cycles += 4;
-        break;
-
-      // 0x7d  LD A,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7d:
-        this.A = this.L;
-        this.cycles += 4;
-        break;
-
-      // 0x7e  LD A,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-      case 0x7e:
-        this.A = this.readByte(uint16(this.H, this.L));
-        this.cycles += 8;
-        break;
-
-      // 0x80  ADD A,B  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x80:
-        this.A = this.ADD(this.A, this.B);
-        this.cycles += 4;
-        break;
-
-      // 0x81  ADD A,C  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x81:
-        this.A = this.ADD(this.A, this.C);
-        this.cycles += 4;
-        break;
-
-      // 0x82  ADD A,D  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x82:
-        this.A = this.ADD(this.A, this.D);
-        this.cycles += 4;
-        break;
-
-      // 0x83  ADD A,E  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x83:
-        this.A = this.ADD(this.A, this.E);
-        this.cycles += 4;
-        break;
-
-      // 0x84  ADD A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x84:
-        this.A = this.ADD(this.A, this.H);
-        this.cycles += 4;
-        break;
-
-      // 0x85  ADD A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x85:
-        this.A = this.ADD(this.A, this.L);
-        this.cycles += 4;
         break;
 
       // 0x86  ADD A,(HL)  length: 1  cycles: 8  flags: Z0HC  group: x8/alu
       case 0x86:
-        this.A = this.ADD(this.A, this.readByte(uint16(this.H, this.L)));
+        this.A = this.ADD(this.A, this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
-      // 0x87  ADD A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x87:
-        this.A = this.ADD(this.A, this.A);
-        this.cycles += 8;
-        break;
-
-      // 0x88  ADC A,B  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x88:
-        this.A = this.ADC(this.A, this.B);
+      case 0x88: // 0x88  ADC A,B  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x89: // 0x89  ADC A,C  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x8a: // 0x8a  ADC A,D  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x8b: // 0x8b  ADC A,E  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x8d: // 0x8d  ADC A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x8f: // 0x8f  ADC A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+      case 0x8c: // 0x8c  ADC A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.ADC(this.A, this[r1]);
         this.cycles += 4;
         break;
 
-      // 0x89  ADC A,C  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x89:
-        this.A = this.ADC(this.A, this.C);
-        this.cycles += 4;
-        break;
-
-      // 0x8a  ADC A,D  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x8a:
-        this.A = this.ADC(this.A, this.D);
-        this.cycles += 4;
-        break;
-
-      // 0x8b  ADC A,E  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x8b:
-        this.A = this.ADC(this.A, this.E);
-        this.cycles += 4;
-        break;
-
-      // 0x8d  ADC A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-      case 0x8d:
-        this.A = this.ADC(this.A, this.L);
-        this.cycles += 4;
-        break;
-
-      // 0x90  SUB B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x90:
-        this.A = this.SUB(this.A, this.B);
-        this.cycles += 4;
-        break;
-
-      // 0x91  SUB C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x91:
-        this.A = this.SUB(this.A, this.C);
-        this.cycles += 4;
-        break;
-
-      // 0x92  SUB D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x92:
-        this.A = this.SUB(this.A, this.D);
-        this.cycles += 4;
-        break;
-
-      // 0x93  SUB E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x93:
-        this.A = this.SUB(this.A, this.E);
-        this.cycles += 4;
-        break;
-
-      // 0x94  SUB H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x94:
-        this.A = this.SUB(this.A, this.H);
-        this.cycles += 4;
-        break;
-       
-      // 0x95  SUB L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x95:
-        this.A = this.SUB(this.A, this.L);
+      case 0x90: // 0x90  SUB B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x91: // 0x91  SUB C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x92: // 0x92  SUB D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x93: // 0x93  SUB E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x94: // 0x94  SUB H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x95: // 0x95  SUB L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x97: // 0x97  SUB A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.SUB(this.A, this[r1]);
         this.cycles += 4;
         break;
        
       // 0x96  SUB (HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
       case 0x96:
-        this.A = this.SUB(this.readByte(uint16(this.H, this.L)));
+        this.A = this.SUB(this.readByte(this.HL()));
         this.cycles += 4;
         break;
        
-      // 0x97  SUB A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x97:
-        this.A = this.SUB(this.A, this.A);
+      case 0x98: // 0x98  SBC A,B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x99: // 0x99  SBC A,C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x9a: // 0x9a  SBC A,D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x9b: // 0x9b  SBC A,E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x9c: // 0x9c  SBC A,H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x9d: // 0x9d  SBC A,L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+      case 0x9f: // 0x9f  SBC A,A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
+        r1 = this.r[op.z];
+        this.A = this.SBC(this.A, this[r1]);
         this.cycles += 4;
         break;
 
-      // 0x98  SBC A,B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x98:
-        this.A = this.ADD(this.A, this.B + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-
-      // 0x99  SBC A,C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x99:
-        this.A = this.ADD(this.A, this.C + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-
-      // 0x9a  SBC A,D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x9a:
-        this.A = this.ADD(this.A, this.D + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-
-      // 0x9b  SBC A,E  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x9b:
-        this.A = this.ADD(this.A, this.E + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-       
-      // 0x9c  SBC A,H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x9c:
-        this.A = this.ADD(this.A, this.H + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-
-      // 0x9d  SBC A,L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x9d:
-        this.A = this.ADD(this.A, this.L + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
-        break;
-
-      // 0x9f  SBC A,A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-      case 0x9f:
-        this.A = this.ADD(this.A, this.A + ((this.F & C_FLAG) ? 1 : 0));
-        this.cycles += 4;
+      case 0x9e: // 0x9e  SBC A,(HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
+        this.A = this.SBC(this.A, this.readByte(this.HL()));
+        this.cycles += 8;
         break;
        
       // 0xe0  LDH (a8),A  length: 2  cycles: 12  flags: ----  group: x8/lsm
@@ -1653,33 +1394,9 @@ class CPU {
         this.cycles += 16;
         break;
 
-      // 0x6b  LD L,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x6b:
-        this.L = this.E;
-        this.cycles += 4;
-        break;
-
-      // 0x68  LD L,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x68:
-        this.L = this.B;
-        this.cycles += 4;
-      break;
-
-      // 0x7b  LD A,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7b:
-        this.A = this.E;
-        this.cycles += 4;
-        break;
-
       // 0x12  LD (DE),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x12:
         this.writeByte(uint16(this.D, this.E), this.A);
-        this.cycles += 8;
-        break;
-
-      // 0x13  INC DE  length: 1  cycles: 8  flags: ----  group: x16/alu
-      case 0x13:
-        [this.D, this.E] = this.INC16(this.D, this.E);
         this.cycles += 8;
         break;
 
@@ -1689,16 +1406,19 @@ class CPU {
         this.cycles += 8;
         break;
 
-      // 0x23  INC HL  length: 1  cycles: 8  flags: ----  group: x16/alu
-      case 0x23:
+      case 0x03: // 0x03  INC BC  length: 1  cycles: 8  flags: ----  group: x16/alu
+        [this.B, this.C] = this.INC16(this.B, this.C);
+        this.cycles += 8;
+        break;
+
+      case 0x23: // 0x23  INC HL  length: 1  cycles: 8  flags: ----  group: x16/alu
         [this.H, this.L] = this.INC16(this.H, this.L);
         this.cycles += 8;
         break;
 
-      // 0x24  INC H  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x24:
-        this.H = this.INC(this.H);
-        this.cycles += 4;
+      case 0x13: // 0x13  INC DE  length: 1  cycles: 8  flags: ----  group: x16/alu
+        [this.D, this.E] = this.INC16(this.D, this.E);
+        this.cycles += 8;
         break;
 
       // 0x27  DAA  length: 1  cycles: 4  flags: Z-0C  group: x8/alu
@@ -1706,23 +1426,9 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x29  ADD HL,HL  length: 1  cycles: 8  flags: -0HC  group: x16/alu
-      case 0x29:
-        [this.H, this.L] = this.ADD16(uint16(this.H, this.L), uint16(this.H, this.L));
-        break;
-
-      // 0x1d  DEC E  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-      case 0x1d:
-        this.E = this.DEC(this.E);
-        this.cycles += 4;
-        break;
-
       // 0x34  INC (HL)  length: 1  cycles: 12  flags: Z0H-  group: x8/alu
       case 0x34:
-        this.writeByte(
-          uint16(this.H, this.L), 
-          this.INC(this.readByte(uint16(this.H, this.L)))
-        );
+        this.writeByte(this.HL(), this.INC(this.readByte(this.HL())));
         this.cycles += 12;
         break;
 
@@ -1731,442 +1437,304 @@ class CPU {
         this.cycles += this.JRC(this.read("r8"));
         break;
 
-      // 0x7a  LD A,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7a:
-        this.A = this.D;
-        this.cycles += 4;
-        break;
-
-      // 0x7c  LD A,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7c:
-        this.A = this.H;
-        this.cycles += 4;
-        break;
-
       // cb prefixes
       case 0xcb: 
+
         // Get the actual cbcode
         this.cbcode = this.nextByte();
+        let cbop = this.decode(this.cbcode);
 
         switch(this.cbcode) {
-          // (cb) 0x00  RLC B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x00:
-            this.B = this.RLC(this.B);
+    
+          case 0x00: // (cb) 0x00  RLC B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x01: // (cb) 0x01  RLC C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x02: // (cb) 0x02  RLC D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x03: // (cb) 0x03  RLC E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x04: // (cb) 0x04  RLC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x05: // (cb) 0x05  RLC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x07: // (cb) 0x07  RLC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.RLC(this[r1]);
             this.cycles += 8;
             break;
 
-          // (cb) 0x01  RLC C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x01:
-            this.C = this.RLC(this.C);
+          case 0x06: // (cb) 0x06  RLC (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
+            this.writeByte(this.HL(), this.RLC(this.readByte(this.HL())));
             this.cycles += 8;
             break;
 
-          // (cb) 0x02  RLC D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x02:
-            this.D = this.RLC(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x03  RLC E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x03:
-            this.E = this.RLC(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x04  RLC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x04:
-            this.H = this.RLC(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x05  RLC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x05:
-            this.L = this.RLC(this.L);
-            this.cycles += 8;
-            break;
-   
-          // (cb) 0x06  RLC (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
-          case 0x06:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.RLC(this.readByte(uint16(this.H, this.L)))
-            );
+          case 0x08: // (cb) 0x08  RRC B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x09: // (cb) 0x09  RRC C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x0a: // (cb) 0x0a  RRC D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x0b: // (cb) 0x0b  RRC E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x0c: // (cb) 0x0c  RRC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x0d: // (cb) 0x0d  RRC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x0e: // (cb) 0x0e  RRC (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
+          case 0x0f: // (cb) 0x0f  RRC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.RRC(this[r1]);
             this.cycles += 8;
             break;
 
-          // (cb) 0x07  RLC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x07:
-            this.A = this.RLC(this.A);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x08  RRC B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x08:
-            this.B = this.RRC(this.B);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x11  RL C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x11:
-            this.C = this.RL(this.C);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x09  RRC C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x09:
-            this.C = this.RRC(this.C);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x0a  RRC D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0a:
-            this.D = this.RRC(this.D);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x0b  RRC E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0b:
-            this.E = this.RRC(this.E);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x0c  RRC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0c:
-            this.H = this.RRC(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x0d  RRC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0d:
-            this.L = this.RRC(this.L);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x0f  RRC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0f:
-            this.A = this.RRC(this.A);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x19  RR C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x19:
-            this.C = this.RR(this.C);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x10  RL B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x10:
-            this.B = this.RL(this.B);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x11  RL C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x11:
-            this.C = this.RL(this.C);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x12  RL D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x12:
-            this.D = this.RL(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x13  RL E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x13:
-            this.E = this.RL(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x14  RL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x14:
-            this.H = this.RL(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x15  RL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x15:
-            this.L = this.RL(this.L);
+          case 0x10: // (cb) 0x10  RL B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x11: // (cb) 0x11  RL C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x12: // (cb) 0x12  RL D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x13: // (cb) 0x13  RL E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x14: // (cb) 0x14  RL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x15: // (cb) 0x15  RL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x17: // (cb) 0x17  RL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.RL(this[r1]);
             this.cycles += 8;
             break;
            
           // (cb) 0x16  RL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x16:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.RL(this.readByte(uint16(this.H, this.L)))
-            );
+            this.writeByte(this.HL(), this.RL(this.readByte(this.HL())));
             this.cycles += 16;
             break;
            
-          // (cb) 0x17  RL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x17:
-            this.A = this.RL(this.A);
+          case 0x18: // (cb) 0x18  RR B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x19: // (cb) 0x19  RR C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x1a: // (cb) 0x1a  RR D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x1b: // (cb) 0x1b  RR E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x1c: // (cb) 0x1c  RR H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x1d: // (cb) 0x1d  RR L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x1f: // (cb) 0x1f  RR A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.RR(this[r1]);
             this.cycles += 8;
             break;
+
            
-          // (cb) 0x18  RR B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x18:
-            this.B = this.RR(this.B);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x19  RR C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x19:
-            this.C = this.RC(this.C);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x1a  RR D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x1a:
-            this.D = this.RR(this.D);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x1b  RR E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x1b:
-            this.E = this.RR(this.E);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x1c  RR H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x1c:
-            this.H = this.RR(this.H);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x1d  RR L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x1d:
-            this.L = this.RR(this.L);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x1e  RR (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
-          case 0x1e:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.RR(this.readByte(uint16(this.H, this.L)))
-            );
+          case 0x1e: // (cb) 0x1e  RR (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
+            this.writeByte(this.HL(), this.RR(this.readByte(this.HL())));
             this.cycles += 16;
             break;
            
-          // (cb) 0x1f  RR A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x1f:
-            this.A = this.RR(this.A);
-            this.cycles += 8;
-            // Not implemented
-            break;
-
-          // (cb) 0x20  SLA B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x20:
-            this.B = this.SLA(this.B);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x21  SLA C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x21:
-            this.C = this.SLA(this.C);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x22  SLA D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x22:
-            this.D = this.SLA(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x23  SLA E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x23:
-            this.E = this.SLA(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x24  SLA H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x24:
-            this.H = this.SLA(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x25  SLA L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x25:
-            this.L = this.SLA(this.L);
+          case 0x20: // (cb) 0x20  SLA B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x21: // (cb) 0x21  SLA C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x22: // (cb) 0x22  SLA D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x23: // (cb) 0x23  SLA E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x24: // (cb) 0x24  SLA H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x25: // (cb) 0x25  SLA L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x27: // (cb) 0x27  SLA A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.SLA(this[r1]);
             this.cycles += 8;
             break;
            
           // (cb) 0x26  SLA (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x26:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.SLA(uint16(this.H, this.L))
-            );
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x27  SLA A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x27:
-            this.A = this.SLA(this.A);
+            this.writeByte(this.HL(), this.SLA(this.HL()));
             this.cycles += 8;
             break;
 
-          // (cb) 0x28  SRA B  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x28:
-            this.B = this.SRA(this.B);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x29  SRA C  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x29:
-            this.C = this.SRA(this.C);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x2a  SRA D  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x2a:
-            this.D = this.SRA(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x2b  SRA E  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x2b:
-            this.E = this.SRA(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x2c  SRA H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x2c:
-            this.H = this.SRA(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x2d  SRA L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x2d:
-            this.L = this.SRA(this.L);
+          case 0x2f: // (cb) 0x2f  SRA A  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x28: // (cb) 0x28  SRA B  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x29: // (cb) 0x29  SRA C  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x2a: // (cb) 0x2a  SRA D  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x2b: // (cb) 0x2b  SRA E  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x2c: // (cb) 0x2c  SRA H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x2d: // (cb) 0x2d  SRA L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.SRA(this[r1]);
             this.cycles += 8;
             break;
            
           // (cb) 0x2e  SRA (HL)  length: 2  cycles: 16  flags: Z000  group: x8/rsb
           case 0x2e:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.SRA(this.readByte(uint16(this.H, this.L)))
-            );
+            this.writeByte(this.HL(), this.SRA(this.readByte(this.HL())));
             this.cycles += 16;
             break;
            
-          // (cb) 0x2f  SRA A  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x2f:
-            this.A = this.SRA(this.A);
+          case 0x40: // (cb) 0x40  BIT 0,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x41: // (cb) 0x41  BIT 0,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x42: // (cb) 0x42  BIT 0,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x43: // (cb) 0x43  BIT 0,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x44: // (cb) 0x44  BIT 0,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x45: // (cb) 0x45  BIT 0,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x47: // (cb) 0x47  BIT 0,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x48: // (cb) 0x48  BIT 1,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x49: // (cb) 0x49  BIT 1,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x4a: // (cb) 0x4a  BIT 1,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x4b: // (cb) 0x4b  BIT 1,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x4c: // (cb) 0x4c  BIT 1,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x4d: // (cb) 0x4d  BIT 1,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x4f: // (cb) 0x4f  BIT 1,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x50: // (cb) 0x50  BIT 2,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x51: // (cb) 0x51  BIT 2,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x52: // (cb) 0x52  BIT 2,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x53: // (cb) 0x53  BIT 2,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x54: // (cb) 0x54  BIT 2,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x55: // (cb) 0x55  BIT 2,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x57: // (cb) 0x57  BIT 2,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x58: // (cb) 0x58  BIT 3,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x59: // (cb) 0x59  BIT 3,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x5a: // (cb) 0x5a  BIT 3,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x5b: // (cb) 0x5b  BIT 3,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x5c: // (cb) 0x5c  BIT 3,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x5d: // (cb) 0x5d  BIT 3,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x5f: // (cb) 0x5f  BIT 3,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x60: // (cb) 0x60  BIT 4,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x61: // (cb) 0x61  BIT 4,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x62: // (cb) 0x62  BIT 4,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x63: // (cb) 0x63  BIT 4,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x64: // (cb) 0x64  BIT 4,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x65: // (cb) 0x65  BIT 4,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x67: // (cb) 0x67  BIT 4,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x68: // (cb) 0x68  BIT 5,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x69: // (cb) 0x69  BIT 5,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x6a: // (cb) 0x6a  BIT 5,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x6b: // (cb) 0x6b  BIT 5,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x6c: // (cb) 0x6c  BIT 5,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x6d: // (cb) 0x6d  BIT 5,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x6f: // (cb) 0x6f  BIT 5,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x70: // (cb) 0x70  BIT 6,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x71: // (cb) 0x71  BIT 6,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x72: // (cb) 0x72  BIT 6,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x73: // (cb) 0x73  BIT 6,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x74: // (cb) 0x74  BIT 6,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x75: // (cb) 0x75  BIT 6,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x77: // (cb) 0x77  BIT 6,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x78: // (cb) 0x78  BIT 7,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x79: // (cb) 0x79  BIT 7,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x7a: // (cb) 0x7a  BIT 7,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x7b: // (cb) 0x7b  BIT 7,E  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x7c: // (cb) 0x7c  BIT 7,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x7d: // (cb) 0x7d  BIT 7,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+          case 0x7f: // (cb) 0x7f  BIT 7,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this.BIT(cbop.y, this[r1]);
             this.cycles += 8;
             break;
 
-          // (cb) 0x7c  BIT 7,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
-          case 0x7c:
-            this.BIT(7, this.H);
-            this.cycles += 2;
+          case 0x46: // (cb) 0x46  BIT 0,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x4e: // (cb) 0x4e  BIT 1,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x56: // (cb) 0x56  BIT 2,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x5e: // (cb) 0x5e  BIT 3,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x66: // (cb) 0x66  BIT 4,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x6e: // (cb) 0x6e  BIT 5,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x76: // (cb) 0x76  BIT 6,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+          case 0x7e: // (cb) 0x7e  BIT 7,(HL)  length: 2  cycles: 16  flags: Z01-  group: x8/rsb
+            this.BIT(cbop.y, this.readByte(this.HL()));
+            this.cycles += 16;
             break;
 
-          // (cb) 0x30  SWAP B  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x30:
-            this.B = this.SWAP(this.B);
+          case 0x30: // (cb) 0x30  SWAP B  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x31: // (cb) 0x31  SWAP C  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x32: // (cb) 0x32  SWAP D  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x33: // (cb) 0x33  SWAP E  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x34: // (cb) 0x34  SWAP H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x35: // (cb) 0x35  SWAP L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+          case 0x37: // (cb) 0x37  SWAP A  length: 2  cycles: 8  flags: Z000  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.SWAP(this[r1]);
             this.cycles += 8;
             break;
-           
-          // (cb) 0x31  SWAP C  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x31:
-            this.C = this.SWAP(this.C);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x32  SWAP D  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x32:
-            this.D = this.SWAP(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x33  SWAP E  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x33:
-            this.E = this.SWAP(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x34  SWAP H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x34:
-            this.H = this.SWAP(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x35  SWAP L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x35:
-            this.L = this.SWAP(this.L);
-            this.cycles += 8;
-            break;
-           
+
           // (cb) 0x36  SWAP (HL)  length: 2  cycles: 16  flags: Z000  group: x8/rsb
           case 0x36:
-            this.writeByte(
-              uint16(this.H, this.L), 
-              this.SWAP(this.readByte(uint16(this.H, this.L)))
-            );
+            this.writeByte(this.HL(), this.SWAP(this.readByte(this.HL())));
+            this.cycles += 16;
+            break;
+
+          case 0x38: // (cb) 0x38  SRL B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x39: // (cb) 0x39  SRL C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x3a: // (cb) 0x3a  SRL D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x3b: // (cb) 0x3b  SRL E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x3c: // (cb) 0x3c  SRL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x3d: // (cb) 0x3d  SRL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+          case 0x3f: // (cb) 0x3f  SRL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this[r1] = this.SRL(this[r1]);
+            this.cycles += 8;
+            break;
+           
+          case 0x3e: // (cb) 0x3e  SRL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
+            this.writeByte(this.HL(), this.SRL(this.readByte(this.HL())));
+            this.cycles += 8;
+            break;
+
+          // (cb) 0x86  RES 0,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0x86:
+            this.writeByte(this.HL(), this.RES(0, this.readByte(this.HL())));
+            this.cycles += 16;
+            break;
+
+          case 0xc0: // (cb) 0xc0  SET 0,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc1: // (cb) 0xc1  SET 0,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc2: // (cb) 0xc2  SET 0,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc3: // (cb) 0xc3  SET 0,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc4: // (cb) 0xc4  SET 0,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc5: // (cb) 0xc5  SET 0,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc7: // (cb) 0xc7  SET 0,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc8: // (cb) 0xc8  SET 1,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xc9: // (cb) 0xc9  SET 1,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xca: // (cb) 0xca  SET 1,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xcb: // (cb) 0xcb  SET 1,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xcc: // (cb) 0xcc  SET 1,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xcd: // (cb) 0xcd  SET 1,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xcf: // (cb) 0xcf  SET 1,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd0: // (cb) 0xd0  SET 2,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd1: // (cb) 0xd1  SET 2,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd2: // (cb) 0xd2  SET 2,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd3: // (cb) 0xd3  SET 2,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd4: // (cb) 0xd4  SET 2,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd5: // (cb) 0xd5  SET 2,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd7: // (cb) 0xd7  SET 2,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd8: // (cb) 0xd8  SET 3,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xd9: // (cb) 0xd9  SET 3,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xda: // (cb) 0xda  SET 3,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xdb: // (cb) 0xdb  SET 3,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xdc: // (cb) 0xdc  SET 3,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xdd: // (cb) 0xdd  SET 3,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xdf: // (cb) 0xdf  SET 3,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe0: // (cb) 0xe0  SET 4,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe1: // (cb) 0xe1  SET 4,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe2: // (cb) 0xe2  SET 4,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe3: // (cb) 0xe3  SET 4,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe4: // (cb) 0xe4  SET 4,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe5: // (cb) 0xe5  SET 4,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe7: // (cb) 0xe7  SET 4,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe8: // (cb) 0xe8  SET 5,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xe9: // (cb) 0xe9  SET 5,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xea: // (cb) 0xea  SET 5,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xeb: // (cb) 0xeb  SET 5,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xec: // (cb) 0xec  SET 5,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xed: // (cb) 0xed  SET 5,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xef: // (cb) 0xef  SET 5,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf0: // (cb) 0xf0  SET 6,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf1: // (cb) 0xf1  SET 6,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf2: // (cb) 0xf2  SET 6,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf3: // (cb) 0xf3  SET 6,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf4: // (cb) 0xf4  SET 6,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf5: // (cb) 0xf5  SET 6,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf7: // (cb) 0xf7  SET 6,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf8: // (cb) 0xf8  SET 7,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xf9: // (cb) 0xf9  SET 7,C  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xfa: // (cb) 0xfa  SET 7,D  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xfb: // (cb) 0xfb  SET 7,E  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xfc: // (cb) 0xfc  SET 7,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xfd: // (cb) 0xfd  SET 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
+          case 0xff: // (cb) 0xff  SET 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
+            r1 = this.r[cbop.z];
+            this.SET(cbop.y, this[r1]);
+            this.cycles += 8;
+            break;
+
+          case 0xc6: // (cb) 0xc6  SET 0,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xce: // (cb) 0xce  SET 1,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xd6: // (cb) 0xd6  SET 2,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xde: // (cb) 0xde  SET 3,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xe6: // (cb) 0xe6  SET 4,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xee: // (cb) 0xee  SET 5,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xf6: // (cb) 0xf6  SET 6,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+          case 0xfe: // (cb) 0xfe  SET 7,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
+            this.BIT(cbop.y, this.readByte(this.HL()));
             this.cycles += 16;
             break;
            
-          // (cb) 0x37  SWAP A  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-          case 0x37:
-            this.A = this.SWAP(this.A);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x38  SRL B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x38:
-            this.B = this.SRL(this.B);
-            this.cycles += 8;
-            break;
-
-          // (cb) 0x39  SRL C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x39:
-            this.C = this.SRL(this.C);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3a  SRL D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x3a:
-            this.D = this.SRL(this.D);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3b  SRL E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x3b:
-            this.E = this.SRL(this.E);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3c  SRL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x3c:
-            this.H = this.SRL(this.H);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3d  SRL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x3d:
-            this.L = this.SRL(this.L);
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3e  SRL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
-          case 0x3e:
-            this.writeByte( 
-              uint16(this.H, this.L),
-              this.readByte(uint16(this.H, this.L))
-            );
-            this.cycles += 8;
-            break;
-           
-          // (cb) 0x3f  SRL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x3f:
-            this.A = this.SRL(this.A);
-            this.cycles += 8;
-            break;
-
           default: 
             throw Error('(cb) ' + hexify(this.cbcode) + ' not found (pc=' + this.PC + ' next=' + hexify(this.readByte(this.PC + 1)) + ')');
         }
