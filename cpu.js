@@ -19,7 +19,6 @@ function uint16(hi, lo) {
 class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
-    this.calls = [];
     this.ppu = ppu;
     this.A = 0;
     this.B = 0;
@@ -360,7 +359,7 @@ class CPU {
 
   // Enable interrupt
   EI() {
-    this.IMEScheduled = this.PC + 1;
+    //this.IMEScheduled = this.PC + 1;
   }
 
   // Disable interrupts
@@ -865,6 +864,7 @@ class CPU {
       // 0x1a  LD A,(DE)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x1a:
         this.A = this.readByte(uint16(this.D, this.E));
+        this.A = this.readByte(uint16(this.D, this.E));
         this.cycles += 8;
         break;
 
@@ -1334,13 +1334,13 @@ class CPU {
 
       // 0x33  INC SP  length: 1  cycles: 8  flags: ----  group: x16/alu
       case 0x33:
-        this.SP = ++this.SP & 0xfff;
+        this.SP = ++this.SP & 0xffff;
         this.cycles += 8;
         break;
 
       // 0x3b  DEC SP  length: 1  cycles: 8  flags: ----  group: x16/alu
       case 0x3b:
-        this.SP = --this.SP & 0xfff;
+        this.SP = --this.SP & 0xffff;
         this.cycles += 8;
         break;
 
@@ -1366,6 +1366,11 @@ class CPU {
       // 0x3f  CCF  length: 1  cycles: 4  flags: -00C  group: x8/alu
       case 0x3f:
         this.clearFlag("C");
+        this.cycles += 4;
+        break;
+
+      // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
+      case 0x76:
         this.cycles += 4;
         break;
 
@@ -2008,7 +2013,6 @@ class CPU {
     this.updateIME();
     this.updateInterrupts();
     this.totalCycles += this.cycles;
-    this.calls.push(hexify(this.code));
     return this.cycles;
   }
 }

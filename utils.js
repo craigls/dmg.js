@@ -2,6 +2,7 @@
 // Random junk
 
 function hexify(h) {
+  if (h === undefined || h === null) return '(none)';
   s = h.toString(16);
   if (s.length < 2) {
     return '0x0' + h.toString(16);
@@ -42,10 +43,4 @@ function printCalls(start=0, count=25) {
   calls.slice(start, start + count).forEach(function(call, i) {
     console.log('cycles=' + call.cycles + ' PC=' + call.PC + ' code=' + hexify(call.code) + ' A=' + call.A + ' F=' + call.F + ' D=' + call.D + ' E=' + call.E + ' B=' + call.B +  ' C=' + call.C + ' H=' + call.H + ' L=' + call.L + ' SP=' + call.SP);
   });
-}
-
-function blargg() {
-  let c = dmg.mmu.readByte(0xff01);
-  console.log(String.fromCharCode(c));
-  dmg.mmu.writeByte(0xff02, 0x0);
 }

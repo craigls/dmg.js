@@ -136,7 +136,10 @@ class PPU {
   getTileData(tileIndex) {
     // Get tile data for tile id 
     // Each tile uses 16 bytes of memory
-    let address = 0x8000 + (16 * tileIndex); 
+    
+    // get tile data base address via bit 4 of LCDC register
+    let base = LCDC_REG & (1 << 4) ? 0x8800 : 0x8000;
+    let address = base + (16 * tileIndex); 
 
     for (let offset = 0; offset < 16; offset++) {
       this.tileData[offset] = this.readByte(address + offset);

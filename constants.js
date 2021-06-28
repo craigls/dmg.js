@@ -10,6 +10,7 @@ const C_FLAG = 16; // carry
 
 const SCROLLY_REG = 0xff42;
 const SCROLLX_REG = 0xff43;
+const LCDC_REG = 0xff40;
 const LY_REG = 0xff44;
 const LYC_REG = 0xff45;
 const BGP_REG = 0xff47;

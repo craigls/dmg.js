@@ -12,8 +12,8 @@ class Console {
     this.lineHeight = 12;
   }
 
-  cpuFlagsToText(F) {
-    return ((F & Z_FLAG) ? 'Z' : '-') + ((F & N_FLAG) ? 'N' : '-') + ((F & H_FLAG) ? 'H' : '-') + ((F & C_FLAG) ? 'C' : '-');
+  cpuFlagsToText(cpu) {
+    return cpu.getFlag("Z") ? "Z" : "-" + cpu.getFlag("N") ? "N" : "-" + cpu.getFlag("H") ? "H" : "-" + cpu.getFlag("C") ? "C" : "-";
   }
 
   print(text, col, line) { 
@@ -28,13 +28,8 @@ class Console {
       
   update(dmg) {
     this.clear();
-    this.updatePC(dmg);
     this.updateRegisters(dmg);
     this.updateCode(dmg);
-  }
-
-  updatePC(dmg) {
-    this.print("PC=" + dmg.cpu.PC, 10, 5);
   }
 
   updateCode(dmg) {
@@ -44,12 +39,14 @@ class Console {
 
   updateRegisters(dmg) { 
     this.print("A=" + dmg.cpu.A, 0, 1);
+    this.print("F=" + this.cpuFlagsToText(dmg.cpu), 10, 1)
     this.print("B=" + dmg.cpu.B, 0, 2);
     this.print("C=" + dmg.cpu.C, 10, 2);
     this.print("D=" + dmg.cpu.D, 0, 3);
     this.print("E=" + dmg.cpu.E, 10, 3);
     this.print("H=" + dmg.cpu.H, 0, 4);
     this.print("L=" + dmg.cpu.L, 10, 4);
-    this.print("F=" + this.cpuFlagsToText(dmg.cpu.F), 0, 5)
+    this.print("SP=" + dmg.cpu.SP, 0, 5);
+    this.print("PC=" + dmg.cpu.PC, 10, 5);
   }
 }

@@ -68,14 +68,13 @@ class MMU {
 
   writeByte(loc, value) {
     let cycles = 0;
-
+      
     if (loc == OAM_DMA_REG) {
       this.OAMDMATransfer(value);
       cycles = 160; // DMA Transfer takes 160 cycles
     }
 
     else if (loc == JOYP_REG) {
-      return 0xf0;
     }
 
     else if (loc >= 0 && loc <= 0x7fff) {
