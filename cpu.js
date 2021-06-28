@@ -3,11 +3,6 @@ function isHalfCarry(a, b) {
   return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
 }
 
-// Detects if carry occurs
-function isCarry(a, b) {
-  return ((a & b) & 0xffff) === 0x10000;
-}
-
 // Two's complement to decimal
 function tcBin2Dec(num, bits=8) {
   let neg = (num & (1 << (bits - 1)));
@@ -24,6 +19,7 @@ function uint16(hi, lo) {
 class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
+    this.calls = [];
     this.ppu = ppu;
     this.A = 0;
     this.B = 0;
@@ -43,6 +39,13 @@ class CPU {
     this.IMEScheduled = -1;
     this.IMEEnabled = false;
 
+    this.flags = {
+      Z: Z_FLAG,
+      N: N_FLAG,
+      H: H_FLAG,
+      C: C_FLAG,
+    }
+
     // Lookup tables used when decoding certain instructions 
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
     this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
@@ -55,6 +58,23 @@ class CPU {
 
   readByte(loc) {
     return this.mmu.readByte(loc);
+  }
+
+  setFlag(n) {
+    this.getFlag(n);
+    this.F |= this.flags[n];
+  }
+
+  clearFlag(n) {
+    this.getFlag(n);
+    this.F &= ~this.flags[n];
+  }
+
+  getFlag(n) {
+    if (! this.flags[n]) {
+      throw new Error("Invalid flag!");
+    }
+    return this.F & this.flags[n] ? true : false;
   }
 
   writeByte(loc, value) {
@@ -140,7 +160,7 @@ class CPU {
     this.pushStack(uint16(hi, lo));
   }
 
-  POP(hi, lo) {
+  POP() {
     let val = this.popStack();
     return [val >> 8, val & 0xff];
   }
@@ -154,7 +174,7 @@ class CPU {
   
   JRC(offset) {
     let cycles = 8;
-    if (this.F & C_FLAG) {
+    if (this.getFlag("C")) {
       this.PC += offset;
       cycles += 4;
     }
@@ -164,7 +184,7 @@ class CPU {
   // Jump relative if zero
   JRZ(offset) {
     let cycles = 8;
-    if (this.F & Z_FLAG) {
+    if (this.getFlag("Z")) {
       this.PC += offset;
       cycles += 4;
     }
@@ -174,7 +194,7 @@ class CPU {
   // Jump if zero
   JPZ(addr) {
     let cycles = 12;
-    if (this.F & Z_FLAG) {
+    if (this.getFlag("Z")) {
       this.PC = addr;
       cycles += 4;
     }
@@ -184,7 +204,7 @@ class CPU {
   // Jump if not zero
   JPNZ(addr) {
     let cycles = 12;
-    if (! (this.F & Z_FLAG)) {
+    if (! this.getFlag("Z")) {
       this.PC = addr;
       cycles += 4;
     }
@@ -195,7 +215,7 @@ class CPU {
   // Jump relative if not zero
   JRNZ(offset) {
     let cycles = 8;
-    if (! (this.F & Z_FLAG)) {
+    if (! this.getFlag("Z")) {
       this.PC += offset;
       cycles += 4;
     }
@@ -205,7 +225,7 @@ class CPU {
   // Jump relative if not carry
   JRNC(offset) {
     let cycles = 8;
-    if (! (this.F & C_FLAG)) {
+    if (! this.getFlag("C")) {
       this.PC += offset;
       cycles += 4;
     }
@@ -222,7 +242,7 @@ class CPU {
   // Jump if not carry
   JPNC(addr) {
     let cycles = 8;
-    if (! (this.F & C_FLAG)) {
+    if (! this.getFlag("C")) {
       this.PC = addr;
       cycles += 4;
     }
@@ -232,7 +252,7 @@ class CPU {
   // Jump if carry
   JPC(addr) {
     let cycles = 8;
-    if (this.F & C_FLAG) {
+    if (this.getFlag("C")) {
       this.PC = addr;
       cycles += 4;
     }
@@ -250,7 +270,7 @@ class CPU {
   // Call if zero
   CALLZ(addr) {
     let cycles = 12;
-    if (this.F & Z_FLAG) {
+    if (this.getFlag("Z")) {
       return this.CALL(addr);
     }
     return cycles;
@@ -259,7 +279,7 @@ class CPU {
   // Call if not zero
   CALLNZ(addr) {
     let cycles = 12;
-    if (! (this.F & Z_FLAG)) {
+    if (! this.getFlag("Z")) {
       return this.CALL(addr);
     }
     return cycles;
@@ -268,7 +288,7 @@ class CPU {
   // Call if carry
   CALLC(addr) {
     let cycles = 12;
-    if (this.F & C_FLAG) {
+    if (this.getFlag("C")) {
       return this.CALL(addr);
     }
     return cycles;
@@ -277,7 +297,7 @@ class CPU {
   // Call if not carry
   CALLNC(addr) {
     let cycles = 12;
-    if (! (this.F & C_FLAG)) {
+    if (! this.getFlag("C")) {
       return this.CALL(addr);
     }
     return cycles;
@@ -301,7 +321,7 @@ class CPU {
   // Return if zero
   RETZ() {
     let cycles = 8;
-    if (this.F & Z_FLAG) {
+    if (this.getFlag("Z")) {
       this.PC = this.popStack();
       cycles += 12;
     }
@@ -311,7 +331,7 @@ class CPU {
   // Return if not zero
   RETNZ() {
     let cycles = 8;
-    if (! (this.F & Z_FLAG)) {
+    if (! this.getFlag("Z")) {
       this.PC = this.popStack();
       cycles += 12;
     }
@@ -321,7 +341,7 @@ class CPU {
   // Return if not carry 
   RETNC() {
     let cycles = 8;
-    if (! (this.F & C_FLAG)) {
+    if (! this.getFlag("C")) {
       this.PC = this.popStack();
       cycles += 12;
     }
@@ -331,7 +351,7 @@ class CPU {
   // Return if carry 
   RETC() {
     let cycles = 8;
-    if (this.F & C_FLAG) {
+    if (this.getFlag("C")) {
       this.PC = this.popStack();
       cycles += 12;
     }
@@ -350,13 +370,13 @@ class CPU {
 
   // Test if n-th bit is set
   BIT(bit, num) {
-    this.F &= ~N_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~Z_FLAG;
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("Z");
 
-    // Set Z_FLAG if bit set
+    // Set CPU_FLAG_Z if bit set
     if ((num & (1 << bit)) === 0) {
-      this.F |= Z_FLAG;
+      this.clearFlag("Z");
     }
     return num;
   }
@@ -375,13 +395,13 @@ class CPU {
   AND(b) {
     let val = this.A & b;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F |= H_FLAG;
-    this.F &= ~C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("C");
+    this.clearFlag("H");
 
     if (val === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val;
   }
@@ -389,13 +409,13 @@ class CPU {
   // OR
   OR(n) {
     let val = this.A | n;
-    this.F &= ~Z_FLAG;
-    this.F |= N_FLAG;
-    this.F |= H_FLAG;
-    this.F |= C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
 
     if (val === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val;
   }
@@ -403,170 +423,223 @@ class CPU {
   // XOR
   XOR(n) {
     let val = this.A ^ n;
-    this.F &= ~Z_FLAG;
-    this.F |= N_FLAG;
-    this.F |= H_FLAG;
-    this.F |= C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
 
     // Set Z == 0 if zero
     if (val === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val;
   }
 
-  // Rotate left to carry bit
+  // Rotate left, prev carry bit to bit 0
   RL(n) {
+    let carry = (this.getFlag("C"));
+    let rot = (n << 1);
 
-    // Shift the carry flag onto bit 0
-    let carry = ((this.F & C_FLAG) !== 0) ? 1 : 0;
-    let rot = (n << 1) | carry;
+    // Previous carry is copied to bit zero
+    if (carry) {
+      rot |= 1;
+    }
+    else { 
+      rot &= ~1;
+    }
 
     // Reset all flags
-    this.F &= ~H_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~Z_FLAG;
-    this.F &= ~C_FLAG;
+    this.clearFlag("C");
+    this.clearFlag("N");
+    this.clearFlag("Z");
+    this.clearFlag("H");
 
-    // Set C_FLAG and Z_FLAG from resulting rotation
-    if ((rot >> 8) & 1 !== 0) {
-      this.F |= C_FLAG;
+    // Set CPU_FLAG_C and CPU_FLAG_Z from resulting rotation
+    if (rot > 255) {
+      this.setFlag("C");
     }
     if ((rot & 0xff) === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return rot & 0xff;
   }
 
-  // Rotate left
-  RLA(n) {
-    let rot = this.RL(n);
+  // Rotate A register left 
+  RLA() {
+    let rot = this.RL(this.A);
 
     // Reset all excluding carry flag
-    this.F &= ~H_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~Z_FLAG;
+    this.clearFlag("H");
+    this.clearFlag("N");
+    this.clearFlag("Z");
     return rot;
   }
 
-  // Rotate left to carry bit and bit 0
+  // Rotate left: bit 7 to carry flag and bit 0
   RLC(n) {
-    let rot = this.RL(n);
+    let bit7 = n & (1 << 7);
+    let rot = n << 1;
 
-    // Reset all excluding carry flag
-    this.F &= ~H_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~Z_FLAG;
+    // Reset all
+    this.clearFlag("H");
+    this.clearFlag("N");
+    this.clearFlag("Z");
+    this.clearFlag("C");
 
-    // Add carry bit
-    if (this.F & C_FLAG) {
+    if (bit7) {
+      this.setFlag("C");
       rot |= 1;
+    }
+    else { 
+      rot &= ~bit7;
+    }
+    if ((rot & 0xff) === 0) {
+      this.setFlag("Z");
     }
     return rot & 0xff;
   }
 
-  // Shift right: bit 0 to carry, bit7 reset to 0
+  // Shift right: bit 0 to carry, bit 7 reset to 0
   SRL(n) {
-    let val = ((n >> 1) | (0 << 7)) & 0xff;
+    let val = n >> 1;
+    let bit0 = n & (1 << 0);
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~C_FLAG;
-    this.F &= ~H_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("C");
+    this.clearFlag("H");
 
-    if ((n & (1 << 0)) !== 0) {
-      this.F |= C_FLAG;
+    if (bit0) {
+      this.setFlag("C");
     }
-    if (val === 0) {
-      this.F |= Z_FLAG;
+    if ((val & 0xff) === 0) {
+      this.setFlag("Z");
     }
-    return val;
+    return val & 0xff;
   }
 
-  // Shift right: bit 0 to carry, bit 7 unchanged
+  // Shift right: bit 0 to carry flag, bit 7 unchanged
   SRA(n) {
+    let bit0 = n & (1 << 0);
     let bit7 = n & (1 << 7);
-    let val = ((n >> 1) | bit7) & 0xff;
+    let val = n >> 1;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~C_FLAG;
-    this.F &= ~H_FLAG;
+    if (bit7) {
+      val |= (1 << 7);
+    }
+    else {
+      val &= ~(1 << 7);
+    }
 
-    if ((n & (1 << 0)) !== 0) {
-      this.F |= C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("C");
+    this.clearFlag("H");
+
+    if (bit0) {
+      this.setFlag("C");
     }
-    if (val === 0) {
-      this.F |= Z_FLAG;
+    if ((val & 0xff) === 0) {
+      this.setFlag("Z");
     }
-    return val;
+    return val & 0xff;
   }
 
   // Shift left: bit 7 to carry, bit 0 reset to 0
   SLA(n) {
-    let val = ((n << 1) | (n << 0)) & 0xff;
+    let val = ((n << 1) & ~(1 << 0))
+    let bit7 = n & (1 << 7);
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~C_FLAG;
-    this.F &= ~H_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("C");
+    this.clearFlag("H");
 
-    if ((n & (1 << 7)) !== 0) {
-      this.F &= C_FLAG;
+    if (bit7) {
+      this.setFlag("C");
     }
-    if (val === 0) {
-      this.F |= Z_FLAG;
+    if ((val & 0xff) === 0) {
+      this.setFlag("Z");
     }
-    return val;
+    return val & 0xff;
   }
     
-  // Rotate right w/carry
+  // Rotate right: prev carry to bit 7
   RR(n) {
-    let carry = (this.F & C_FLAG) ? 1 : 0;
-    let rot = (n >> 1) | (carry << 7);
+    let carry = (this.getFlag("C"));
+    let rot = (n >> 1); 
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~C_FLAG;
+    if (carry) {
+      rot |= (1 << 7);
+    }
+    else { 
+      rot &= ~(1 << 7);
+    }
 
-    if (rot > 256) {
-      this.F |= C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
+
+    if (rot > 255) {
+      this.setFlag("C");
     }
     if ((rot & 0xff) === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return rot & 0xff;
   }
 
+  // Rotate A right: prev carry to bit 7, clear zero flag
+  RRA() {
+    let rot = this.RR(this.A);
+    this.clearFlag("Z");
+    return rot;
+  }
+
+  // Rotate right: bit 0 to carry flag and bit 7
   RRC(n) {
     let bit0 = (n & (1 << 0));
-    let rot = (n >> 1) | (bit0 << 7);
+    let rot = n >> 1;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
 
-    if (rot & (1 << 0)) {
-      this.F |= C_FLAG;
+    if (bit0) {
+      rot |= (1 << 7);
+      this.setFlag("C");
+    }
+    else {
+      rot &= ~(1 << 7);
+    }
+    if ((rot & 0xff) === 0) {
+      this.setFlag("Z");
     }
     return rot & 0xff;
+  }
+
+  // Rotate A right: bit 0 to carry flag and bit 7
+  RRCA() {
+    let rot = this.RRC(this.A);
+    this.clearFlag("Z");
+    return rot;
   }
 
   // Increment
   INC(n) {
     let val = n + 1;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~H_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
 
     if (isHalfCarry(n, 1)) {
-      this.F |= H_FLAG;
+      this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val & 0xff;
   }
@@ -581,15 +654,15 @@ class CPU {
   // Decrement
   DEC(n) {
     let val = n - 1;
-    this.F |= N_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~Z_FLAG;
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("Z");
 
     if (isHalfCarry(n, -1)) {
-      this.F |= H_FLAG;
+      this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val & 0xff;
   }
@@ -603,36 +676,45 @@ class CPU {
 
   // Addition of a + b + carry bit
   ADC(a, b) {
-    let carry = (this.F & C_FLAG) ? 1 : 0;
+    let carry = (this.getFlag("C")) ? 1 : 0;
     return this.ADD(a, b + carry);
   }
 
   ADD16(a1, a2, b1, b2) {
-    let a = uint16(a1, a2);
-    let b = uint16(b1, b2); 
-    let lo = this.ADD(a & 0xff, b & 0xff);
-    let hi = this.ADD(a >> 8, b >> 8);
-    this.F &= ~Z_FLAG;
-    return [hi, lo];
+    let carryLo = (a2 + b2 > 255) ? 1 : 0;
+    let hi = a1 + b1 + carryLo;
+    let lo = a2 + b2;
+
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
+
+    if ((hi << 8) + lo > (255 << 8)) {
+      this.setFlag("C");
+    }
+    if (isHalfCarry(a1, b1 + carryLo)) {
+      this.setFlag("H");
+    }
+    return [hi & 0xff, lo & 0xff];
   }
 
   // Addition
   ADD(a, b) {
     let val = a + b;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~C_FLAG;
-    this.F &= ~N_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("H");
+    this.clearFlag("C");
+    this.clearFlag("N");
 
     if ((val & 0xff) === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     if (val > 255) {
-      this.F |= C_FLAG;
+      this.setFlag("C");
     }
     if (isHalfCarry(a, b)) {
-      this.F |= H_FLAG;
+      this.setFlag("H");
     }
     return val & 0xff;
   }
@@ -641,25 +723,25 @@ class CPU {
   SUB(a, b) {
     let val = a - b;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~C_FLAG;
-    this.F |= N_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("H");
+    this.clearFlag("C");
+    this.clearFlag("N");
 
     if (val < 0) {
-      this.F |= C_FLAG;
+      this.setFlag("C");
     }
     if (isHalfCarry(a, -b)) {
-      this.F |= H_FLAG;
+      this.setFlag("H");
     }
     if (a === b) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return val & 0xff;
   }
 
   SBC(a, b) {
-    return this.SUB(a, b + (this.F & C_FLAG) ? 1 : 0);
+    return this.SUB(a, b + (this.getFlag("C")) ? 1 : 0);
   }
 
   // Restart command - jump to preset address
@@ -675,8 +757,8 @@ class CPU {
 
   // Flip bits in A register, set N and H flags
   CPL() {
-    this.F |= N_FLAG;
-    this.F |= H_FLAG;
+    this.setFlag("N");
+    this.setFlag("H");
     this.A = ~this.A;
     return this.A;
   }
@@ -687,13 +769,13 @@ class CPU {
     let lo = (n & 0xf0) >> 4;
     let result = hi | lo;
 
-    this.F &= ~Z_FLAG;
-    this.F &= ~N_FLAG;
-    this.F &= ~H_FLAG;
-    this.F &= ~C_FLAG;
+    this.clearFlag("Z");
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
 
     if (result === 0) {
-      this.F |= Z_FLAG;
+      this.setFlag("Z");
     }
     return result;
   }
@@ -703,6 +785,8 @@ class CPU {
     let op = this.decode(code);
     let r1;
     let r2;
+
+    this.cbcode = null;
 
     // TODO: Eliminate giant switch statement
 
@@ -767,7 +851,7 @@ class CPU {
 
       // 0x0f  RRCA  length: 1  cycles: 4  flags: 000C  group: x8/rsb
       case 0x0f:
-        this.A = this.RR(this.A);
+        this.A = this.RRCA();
         this.cycles += 4;
         break;
 
@@ -786,7 +870,7 @@ class CPU {
 
       // 0x1f  RRA  length: 1  cycles: 4  flags: 000C  group: x8/rsb
       case 0x1f:
-        this.A = this.RR(this.A);
+        this.A = this.RRA();
         this.cycles += 4;
         break;
 
@@ -913,12 +997,17 @@ class CPU {
         this.cycles += 12;
         break;
 
+      // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
+      case 0xe8:
+        this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8"));
+        this.cycles += 16;
+        break;
+
       // 0xf1  POP AF  length: 1  cycles: 12  flags: ZNHC  group: x16/lsm
       case 0xf1:
         // TODO: confirm correct behavior
-        let tmpF;
-        [this.A, tmpF] = this.POP();
-        this.F = this.ADD(this.F, tmpF) & 0xf0;
+        [this.A, this.F] = this.POP();
+        this.F &= 0xf0;
         this.cycles += 12;
         break;
 
@@ -942,7 +1031,7 @@ class CPU {
 
       // 0xf8  LD HL,SP+r8  length: 2  cycles: 12  flags: 00HC  group: x16/lsm
       case 0xf8:
-        [this.H, this.L] = this.ADD16(this.SP >> 8, this.SP & 0xff, 0, tcBin2Dec(this.read("r8")));
+        [this.H, this.L] = this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8"));
         this.cycles += 12;
         break;
 
@@ -1037,7 +1126,7 @@ class CPU {
 
       // 0x17  RLA  length: 1  cycles: 4  flags: 000C  group: x8/rsb
       case 0x17:
-        this.A = this.RLA(this.A);
+        this.A = this.RLA();
         this.cycles += 4;
         break;
 
@@ -1077,13 +1166,6 @@ class CPU {
         this.cycles += 8;
         break;
 
-      // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
-      /*
-      case 0xe8:
-        this.SP = this.add(this.SP, tcBin2Dec(this.readByte(this.PC++)));
-        break;
-      */
-
       // 0xe9  JP (HL)  length: 1  cycles: 4  flags: ----  group: control/br
       case 0xe9:
         this.cycles += this.JP(this.HL());
@@ -1109,7 +1191,7 @@ class CPU {
 
       // 0x37  SCF  length: 1  cycles: 4  flags: -001  group: x8/alu
       case 0x37:
-        this.F |= C_FLAG;
+        this.setFlag("C");
         this.cycles += 4;
         break;
 
@@ -1250,6 +1332,24 @@ class CPU {
         this.cycles += 8;
         break;
 
+      // 0x33  INC SP  length: 1  cycles: 8  flags: ----  group: x16/alu
+      case 0x33:
+        this.SP = ++this.SP & 0xfff;
+        this.cycles += 8;
+        break;
+
+      // 0x3b  DEC SP  length: 1  cycles: 8  flags: ----  group: x16/alu
+      case 0x3b:
+        this.SP = --this.SP & 0xfff;
+        this.cycles += 8;
+        break;
+
+      // 0x39  ADD HL,SP  length: 1  cycles: 8  flags: -0HC  group: x16/alu
+      case 0x39:
+        this.SP = uint16(this.ADD16(this.H, this.L, this.SP >> 8, this.SP & 0xff));
+        this.cycles += 8;
+        break;
+
       // 0x3a  LD A,(HL-)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x3a:
         this.A = this.readByte(this.HL());
@@ -1265,7 +1365,7 @@ class CPU {
 
       // 0x3f  CCF  length: 1  cycles: 4  flags: -00C  group: x8/alu
       case 0x3f:
-        this.F &= ~C_FLAG;
+        this.clearFlag("C");
         this.cycles += 4;
         break;
 
@@ -1281,32 +1381,53 @@ class CPU {
       case 0x4a: // 0x4a  LD C,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x4b: // 0x4b  LD C,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x4c: // 0x4c  LD C,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x4d: // 0x4d  LD C,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x50: // 0x50  LD D,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x51: // 0x51  LD D,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x52: // 0x52  LD D,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x53: // 0x53  LD D,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x54: // 0x54  LD D,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x55: // 0x55  LD D,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x57: // 0x57  LD D,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x58: // 0x58  LD E,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x59: // 0x59  LD E,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x5a: // 0x5a  LD E,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x5b: // 0x5b  LD E,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x5c: // 0x5c  LD E,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x5d: // 0x5d  LD E,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x5f: // 0x5f  LD E,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x57: // 0x57  LD D,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x60: // 0x60  LD H,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x61: // 0x61  LD H,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x62: // 0x62  LD H,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x63: // 0x63  LD H,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x64: // 0x64  LD H,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x65: // 0x65  LD H,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x67: // 0x67  LD H,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x6b: // 0x6b  LD L,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x6f: // 0x6f  LD L,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x68: // 0x68  LD L,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x69: // 0x69  LD L,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6a: // 0x6a  LD L,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6b: // 0x6b  LD L,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6c: // 0x6c  LD L,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6d: // 0x6d  LD L,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x6f: // 0x6f  LD L,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x78: // 0x78  LD A,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x79: // 0x79  LD A,C  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7d: // 0x7d  LD A,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x7a: // 0x7a  LD A,D  length: 1  cycles: 4  flags: ----  group: x8/lsm
-      case 0x7c: // 0x7c  LD A,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x7b: // 0x7b  LD A,E  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7c: // 0x7c  LD A,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7d: // 0x7d  LD A,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
+      case 0x7f: // 0x7f  LD A,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
         r1 = this.r[op.y];
         r2 = this.r[op.z];
         this[r1] = this[r2];
         this.cycles += 4;
         break;
 
-
       case 0x46: // 0x46  LD B,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x4e: // 0x4e  LD C,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x56: // 0x56  LD D,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x5e: // 0x5e  LD E,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x66: // 0x66  LD H,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x6e: // 0x6e  LD L,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x7e: // 0x7e  LD A,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
         r1 = this.r[op.y];
@@ -1318,6 +1439,8 @@ class CPU {
       case 0x71: // 0x71  LD (HL),C  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x72: // 0x72  LD (HL),D  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x73: // 0x73  LD (HL),E  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x74: // 0x74  LD (HL),H  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0x75: // 0x75  LD (HL),L  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x77: // 0x77  LD (HL),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
         r1 = this.r[op.z];
         this.writeByte(this.HL(), this[r1]);
@@ -1885,6 +2008,7 @@ class CPU {
     this.updateIME();
     this.updateInterrupts();
     this.totalCycles += this.cycles;
+    this.calls.push(hexify(this.code));
     return this.cycles;
   }
 }
