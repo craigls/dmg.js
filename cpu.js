@@ -35,8 +35,8 @@ class CPU {
     this.prevcode = null;
     this.totalCycles = 0;
     this.cycles = 0;
-    this.IMEScheduled = -1;
     this.IMEEnabled = false;
+    this.calls = [];
 
     this.flags = {
       Z: Z_FLAG,
@@ -359,7 +359,8 @@ class CPU {
 
   // Enable interrupt
   EI() {
-    //this.IMEScheduled = this.PC + 1;
+    this.IMEEnabled = true;
+    this.cycles += 2;
   }
 
   // Disable interrupts
@@ -1516,6 +1517,12 @@ class CPU {
         this.A = this.SBC(this.A, this.readByte(this.HL()));
         this.cycles += 8;
         break;
+
+      // 0xde  SBC A,d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
+      case 0xde:
+        this.a = this.SBC(this.A, this.read("d8"));
+        this.cycles += 8;
+        break;
        
       // 0xe0  LDH (a8),A  length: 2  cycles: 12  flags: ----  group: x8/lsm
       case 0xe0:
@@ -1961,48 +1968,38 @@ class CPU {
     return this.cycles;
   }
 
-  updateIME() {
-    if (this.IMEScheduled === this.PC) {
-      this.IMEEnabled = true;
-      this.IMEScheduled = -1;
-    }
-  }
+  handleInterrupt(handler, intFlag) {
+    // Save current PC and jump to interrupt handler
+    this.pushStack(this.PC);
+    this.PC = handler;
 
-  handleInterrupt(handler) {
-    this.IMEEnabled = false;
-    this.cycles += 2;
-    this.cycles += this.CALL(handler);
+    // Reset interrupt flag
+    this.writeByte(IF_REG, this.readByte(IF_REG) & ~intFlag)
   }
 
   updateInterrupts() {
     if (! this.IMEEnabled) {
       return;
     }
+    let interrupts = this.readByte(IE_REG) & this.readByte(IF_REG) & 0x1f;
 
-    let h = this.readByte(IE_REG) & this.readByte(IF_REG) & 0x1f;
-
-    switch(h) {
-      case (h & IF_VBLANK):
-        this.handleInterrupt(IH_VBLANK);
-        break;
-
-      case (h & IF_LCDSTAT):
-        this.handleInterrupt(IH_LCDSTAT);
-        break;
-      
-      case (h & IF_TIMER):
-        this.handleInterrupt(IH_TIMER);
-        break;
-
-      case (h & IF_SERIAL):
-        this.handleInterrupt(IH_SERIAL);
-        break;
-      
-      case (h & IF_JOYPAD):
-        this.handleInterrupt(IH_JOYPAD);
-        break;
+    if (interrupts & IF_VBLANK) {
+      this.handleInterrupt(IH_VBLANK, IF_VBLANK);
+    }
+    else if (interrupts & IF_LCDSTAT) {
+      this.handleInterrupt(IH_LCDSTAT, IF_LCDSTAT);
+    }
+    else if (interrupts & IF_TIMER) {
+      this.handleInterrupt(IH_TIMER, IF_TIMER);
+    }
+    else if (interrupts & IF_SERIAL) {
+      this.handleInterrupt(IH_SERIAL, IF_SERIAL);
+    }
+    else if (interrupts & IF_JOYPAD) {
+      this.handleInterrupt(IH_JOYPAD);
     }
   }
+
 
   // CPU update 
   update() {
@@ -2010,7 +2007,6 @@ class CPU {
     this.prevcode = this.code;
     this.code = this.nextByte();
     this.execute(this.code);
-    this.updateIME();
     this.updateInterrupts();
     this.totalCycles += this.cycles;
     return this.cycles;
