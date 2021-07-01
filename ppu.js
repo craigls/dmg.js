@@ -20,7 +20,7 @@
  */
 
 class PPU {
-  constructor(mmu, screen) {
+  constructor(mmu) {
     this.mmu = mmu;
     this.frameBuf = null;
     this.x = 0;
@@ -68,19 +68,14 @@ class PPU {
     }
   }
 
-  setInterruptFlag(n, state) {
-    let val = this.readByte(IF_REG);
-    if (state) {
-      val |= (1 << n);
-    }
-    else { 
-      val &= ~(1 << n);
-    }
-    this.writeByte(IF_REG, val);
-  }
-
   update(cycles) {
     this.cycles += cycles;
+
+    // If LCD disabled, clear the screen and return early
+    if (! (this.readByte(LCDC_REG) & LCDC_ENABLE)) {
+      this.frameBuf.data.fill(DEFAULT_PALETTE[0]);
+      return;
+    }
 
     if (this.x >= FRAMEBUF_WIDTH) {
       this.x = 0;
@@ -89,9 +84,10 @@ class PPU {
 
     // Begin vblank at scanline 144
     if (this.y == 144) {
-      this.setInterruptFlag(IF_VBLANK, true);
-      this.setStatMode(STAT_VBLANK_FLAG); 
+      this.writeByte(IF_REG, this.readByte(IF_REG) | IF_VBLANK);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) | STAT_VBLANK_FLAG);
     }
+
     // If not vblank: cycle LCD status modes
     else if (this.y < 144) {
       this.cycleStatMode();
@@ -99,7 +95,8 @@ class PPU {
 
     // End of vblank
     else if (this.y == 154) {
-      this.setInterruptFlag(IF_VBLANK, false);
+      this.writeByte(IF_REG, this.readByte(IF_REG) & ~IF_VBLANK);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) & ~STAT_VBLANK_FLAG);
       this.y = 0;
     }
 
@@ -115,6 +112,7 @@ class PPU {
       }
     }
     this.writeByte(LY_REG, this.y);
+    this.writeByte(LYC_REG, this.y);
   }
 
   bgColor(n) {
@@ -138,7 +136,7 @@ class PPU {
     // Each tile uses 16 bytes of memory
     
     // get tile data base address via bit 4 of LCDC register
-    let base = LCDC_REG & (1 << 4) ? 0x8800 : 0x8000;
+    let base = LCDC_REG & LCDC_BG_TILEMAP ? 0x8800 : 0x8000;
     let address = base + (16 * tileIndex); 
 
     for (let offset = 0; offset < 16; offset++) {

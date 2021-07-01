@@ -46,7 +46,7 @@ class Console {
     this.print("E=" + dmg.cpu.E, 10, 3);
     this.print("H=" + dmg.cpu.H, 0, 4);
     this.print("L=" + dmg.cpu.L, 10, 4);
-    this.print("SP=" + dmg.cpu.SP, 0, 5);
-    this.print("PC=" + dmg.cpu.PC, 10, 5);
+    this.print("SP=" + hexify(dmg.cpu.SP), 0, 5);
+    this.print("PC=" + hexify(dmg.cpu.PC), 10, 5);
   }
 }

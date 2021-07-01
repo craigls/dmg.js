@@ -20,6 +20,15 @@ class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
     this.ppu = ppu;
+
+    // Lookup tables used when decoding certain instructions
+    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
+    this.rp = ["BC", "DE", "HL", "SP"];
+    this.rp2 = ["BC", "DE", "HL", "AF"];
+  }
+
+  reset() {
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -36,44 +45,26 @@ class CPU {
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
-    this.calls = [];
 
-    this.flags = {
-      Z: Z_FLAG,
-      N: N_FLAG,
-      H: H_FLAG,
-      C: C_FLAG,
-    }
-
-    // Lookup tables used when decoding certain instructions 
-    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
-    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
-    this.rp = ["BC", "DE", "HL", "SP"];
-    this.rp2 = ["BC", "DE", "HL", "AF"];
   }
 
-  reset() {
+  setFlag(n) {
+    this.F |= CPU_FLAGS[n];
+  }
+
+  clearFlag(n) {
+    this.F &= ~CPU_FLAGS[n];
+  }
+
+  getFlag(n) {
+    if (CPU_FLAGS[n] === undefined) {
+      throw new Error("Invalid flag!");
+    }
+    return ((this.F & CPU_FLAGS[n]) !== 0) ? true : false;
   }
 
   readByte(loc) {
     return this.mmu.readByte(loc);
-  }
-
-  setFlag(n) {
-    this.getFlag(n);
-    this.F |= this.flags[n];
-  }
-
-  clearFlag(n) {
-    this.getFlag(n);
-    this.F &= ~this.flags[n];
-  }
-
-  getFlag(n) {
-    if (! this.flags[n]) {
-      throw new Error("Invalid flag!");
-    }
-    return this.F & this.flags[n] ? true : false;
   }
 
   writeByte(loc, value) {
@@ -85,6 +76,9 @@ class CPU {
   }
 
   decode(code) {
+    // Decodes an opcode using the algorithm from:
+    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+    //
     let x = (code & 0b11000000) >> 6;
     let y = (code & 0b00111000) >> 3;
     let z = (code & 0b00000111);
@@ -155,10 +149,12 @@ class CPU {
     this.L = val & 0xff;
   }
 
+  // Push 2 bytes onto stack
   PUSH(hi, lo) {
     this.pushStack(uint16(hi, lo));
   }
 
+  // Pop 2 bytes from stack
   POP() {
     let val = this.popStack();
     return [val >> 8, val & 0xff];
@@ -171,6 +167,7 @@ class CPU {
     return cycles;
   }
   
+  // Jump relative if not carry
   JRC(offset) {
     let cycles = 8;
     if (this.getFlag("C")) {
@@ -311,10 +308,8 @@ class CPU {
 
   // Return from interrupt
   RETI() {
-    let cycles = 16;
     this.IMEEnabled = true;
     this.PC = this.popStack();
-    return cycles;
   }
 
   // Return if zero
@@ -374,7 +369,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("Z");
 
-    // Set CPU_FLAG_Z if bit set
+    // Set Z if bit set
     if ((num & (1 << bit)) === 0) {
       this.clearFlag("Z");
     }
@@ -454,7 +449,7 @@ class CPU {
     this.clearFlag("Z");
     this.clearFlag("H");
 
-    // Set CPU_FLAG_C and CPU_FLAG_Z from resulting rotation
+    // Set C and Z from resulting rotation
     if (rot > 255) {
       this.setFlag("C");
     }
@@ -647,7 +642,7 @@ class CPU {
   // Increment register pair
   INC16(hi, lo) {
     let val = uint16(hi, lo);
-    val++;
+    val = ++val & 0xffff;
     return [val >> 8, val & 0xff];
   }
 
@@ -670,7 +665,7 @@ class CPU {
   // Decrement register pair
   DEC16(hi, lo) {
     let val = uint16(hi, lo);
-    val--;
+    val = --val & 0xffff;
     return [val >> 8, val & 0xff];
   }
 
@@ -740,6 +735,7 @@ class CPU {
     return val & 0xff;
   }
 
+  // Subtraction: a - (b + carry bit)
   SBC(a, b) {
     return this.SUB(a, b + (this.getFlag("C")) ? 1 : 0);
   }
@@ -1054,7 +1050,8 @@ class CPU {
 
       // 0xd9  RETI  length: 1  cycles: 16  flags: ----  group: control/br
       case 0xd9:
-        this.cycles += this.RETI();
+        this.RETI();
+        this.cycles = 16;
         break;
 
       // 0xf3  DI  length: 1  cycles: 4  flags: ----  group: control/misc
@@ -1968,13 +1965,16 @@ class CPU {
     return this.cycles;
   }
 
-  handleInterrupt(handler, intFlag) {
-    // Save current PC and jump to interrupt handler
+  handleInterrupt(handler, flag) {
+    // Save current PC and set to interrupt handler
     this.pushStack(this.PC);
     this.PC = handler;
 
-    // Reset interrupt flag
-    this.writeByte(IF_REG, this.readByte(IF_REG) & ~intFlag)
+    // Prevent further interrupts until RETI called
+    this.IMEEnabled = false;
+
+    // Reset IF bit
+    this.writeByte(IE_REG, this.readByte(IE_REG) & ~flag)
   }
 
   updateInterrupts() {
@@ -1996,10 +1996,9 @@ class CPU {
       this.handleInterrupt(IH_SERIAL, IF_SERIAL);
     }
     else if (interrupts & IF_JOYPAD) {
-      this.handleInterrupt(IH_JOYPAD);
+      this.handleInterrupt(IH_JOYPAD, IF_JOYPAD);
     }
   }
-
 
   // CPU update 
   update() {

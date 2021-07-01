@@ -1,5 +1,4 @@
 
-
 class Screen {
   constructor(canvas, ppu) {
     this.canvas = canvas;
