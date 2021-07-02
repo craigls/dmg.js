@@ -1,3 +1,4 @@
+/* global OAM_DMA_REG, JOYP_REG */
 /*
  * Memory Map 
  * Taken from https://gbdev.io/pandocs
@@ -60,7 +61,7 @@ class MMU {
     let dst = 0xfe00;
     for (var n = 0; n < 160; n++) {
       if (dst == OAM_DMA_REG) {
-        throw new Error("Invalid address for DMA transfer: " + loc);
+        throw new Error("Invalid address for DMA transfer: " + dst);
       }
       this.writeByte(dst + n, this.readByte(src + n));
     }

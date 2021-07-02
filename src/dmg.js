@@ -1,13 +1,5 @@
-
-function createDMG(screenElem, consoleElem) {
-  let mmu = new MMU();
-  let ppu = new PPU(mmu);
-  let screen = new Screen(screenElem, ppu);
-  let cpu = new CPU(mmu, ppu);
-  let cons = new Console(consoleElem);
-  return new DMG(cpu, ppu, mmu, screen, cons);
-}
-
+/* global CPU, MMU, PPU, LCDScreen, Console */
+/* global CYCLES_PER_FRAME */
 
 class DMG {
   constructor(cpu, ppu, mmu, screen, cons) {
@@ -106,7 +98,7 @@ class DMG {
     this.cycles += total;
     this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
-    requestAnimationFrame(() => this.console ? this.console.update(dmg) : {});
+    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
   }
 
   update() {
@@ -115,3 +107,28 @@ class DMG {
   }
 }
 
+function createDMG() {
+  let screenElem = document.getElementById('screen');
+  let consoleElem = document.getElementById('console');
+  let mmu = new MMU();
+  let ppu = new PPU(mmu);
+  let screen = new LCDScreen(screenElem, ppu);
+  let cpu = new CPU(mmu, ppu);
+  let cons = new Console(consoleElem);
+  return new DMG(cpu, ppu, mmu, screen, cons);
+}
+
+function loadRomFromFile(file) {
+  let reader = new FileReader();
+  reader.readAsArrayBuffer(file);
+  reader.onload = function() {
+    window.dmg.loadRom(Array.from(new Uint8Array(reader.result)));
+    window.dmg.start();
+  }
+}
+
+window.createDMG = createDMG;
+window.loadRomFromFile = loadRomFromFile;
+window.onload = () => {
+  window.dmg = window.createDMG();
+}

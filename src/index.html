@@ -8,26 +8,16 @@
 <div>
 <canvas id="console"></canvas">
 </div>
-
 <div>
 <input id="rom" type="file" name="rom" onchange="loadRomFromFile(this.files[0])" />
 </div>
-
+<script src="utils.js"></script>
 <script src="console.js"></script>
 <script src="constants.js"></script>
-<script src="utils.js"></script>
-<script src="loader.js"></script>
 <script src="screen.js"></script>
 <script src="ppu.js"></script>
 <script src="mmu.js"></script>
-<script src="register.js"></script>
 <script src="cpu.js"></script>
 <script src="dmg.js"></script>
-<script>
-  let dmg = createDMG(
-    document.getElementById('screen'),
-    document.getElementById('console'));
-  //dmg.start();
-</script>
 </body>
 </html>

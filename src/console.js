@@ -1,4 +1,4 @@
-
+/* global hexify */
 
 class Console {
   constructor(canvas, height, width) {

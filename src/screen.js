@@ -1,5 +1,7 @@
+const VIEWPORT_WIDTH = 160;
+const VIEWPORT_HEIGHT = 144;
 
-class Screen {
+class LCDScreen {
   constructor(canvas, ppu) {
     this.canvas = canvas;
     this.ppu = ppu;

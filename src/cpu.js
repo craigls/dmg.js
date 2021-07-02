@@ -1,19 +1,12 @@
-// Detects if half-carry occurs
-function isHalfCarry(a, b) {
-  return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
-}
+/* global hexify, uint16 */
+/* global IE_REG, IF_REG, IF_VBLANK, IF_LCDSTAT,  IF_SERIAL, IF_TIMER */
+/* global IF_JOYPAD, IH_VBLANK, IH_LCDSTAT, IH_SERIAL, IH_TIMER, IH_JOYPAD */
 
-// Two's complement to decimal
-function tcBin2Dec(num, bits=8) {
-  let neg = (num & (1 << (bits - 1)));
-  if (neg) {
-    return num | ~((1 << bits) - 1);
-  }
-  return num;
-}
-
-function uint16(hi, lo) {
-  return (hi << 8) + lo;
+const CPU_FLAGS = {
+  Z: 128, // zero
+  N: 64,  // subtraction
+  H: 32,  // half carry
+  C: 16,  // carry
 }
       
 class CPU {
@@ -75,6 +68,20 @@ class CPU {
     return this.readByte(this.PC++);
   }
 
+  // Detects if half-carry occurs
+  isHalfCarry(a, b) {
+    return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
+  }
+
+  // Two's complement to decimal
+  tcBin2Dec(num, bits=8) {
+    let neg = (num & (1 << (bits - 1)));
+    if (neg) {
+      return num | ~((1 << bits) - 1);
+    }
+    return num;
+  }
+
   decode(code) {
     // Decodes an opcode using the algorithm from:
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
@@ -106,7 +113,7 @@ class CPU {
         return this.nextByte();
 
       case "r8":
-        return tcBin2Dec(this.nextByte());
+        return this.tcBin2Dec(this.nextByte());
 
       case "(HL)":
         return this.readByte(this.HL());
@@ -630,7 +637,7 @@ class CPU {
     this.clearFlag("N");
     this.clearFlag("H");
 
-    if (isHalfCarry(n, 1)) {
+    if (this.isHalfCarry(n, 1)) {
       this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
@@ -653,7 +660,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("Z");
 
-    if (isHalfCarry(n, -1)) {
+    if (this.isHalfCarry(n, -1)) {
       this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
@@ -687,7 +694,7 @@ class CPU {
     if ((hi << 8) + lo > (255 << 8)) {
       this.setFlag("C");
     }
-    if (isHalfCarry(a1, b1 + carryLo)) {
+    if (this.isHalfCarry(a1, b1 + carryLo)) {
       this.setFlag("H");
     }
     return [hi & 0xff, lo & 0xff];
@@ -708,7 +715,7 @@ class CPU {
     if (val > 255) {
       this.setFlag("C");
     }
-    if (isHalfCarry(a, b)) {
+    if (this.isHalfCarry(a, b)) {
       this.setFlag("H");
     }
     return val & 0xff;
@@ -726,7 +733,7 @@ class CPU {
     if (val < 0) {
       this.setFlag("C");
     }
-    if (isHalfCarry(a, -b)) {
+    if (this.isHalfCarry(a, -b)) {
       this.setFlag("H");
     }
     if (a === b) {
@@ -781,8 +788,11 @@ class CPU {
     let op = this.decode(code);
     let r1;
     let r2;
+    let cbop;
+    let addr;
 
     this.cbcode = null;
+    
 
     // TODO: Eliminate giant switch statement
 
@@ -949,7 +959,7 @@ class CPU {
 
       // 0x08  LD (a16),SP  length: 3  cycles: 20  flags: ----  group: x16/lsm
       case 0x08:
-        let addr = this.read("a16");
+        addr = this.read("a16");
         this.writeByte(addr, this.SP & 0xff);
         this.writeByte(addr + 1, this.SP >> 8);
         this.cycles += 28;
@@ -1593,7 +1603,7 @@ class CPU {
 
         // Get the actual cbcode
         this.cbcode = this.nextByte();
-        let cbop = this.decode(this.cbcode);
+        cbop = this.decode(this.cbcode);
 
         switch(this.cbcode) {
     
