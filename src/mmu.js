@@ -1,6 +1,6 @@
 /* global OAM_DMA_REG, JOYP_REG */
 /*
- * Memory Map 
+ * Memory Map
  * Taken from https://gbdev.io/pandocs
  *
  * 0x0000 0x3fff: 16 KiB ROM bank 00 From cartridge, usually a fixed bank
@@ -18,7 +18,7 @@
  *
  */
 
-class MMU { 
+class MMU {
   constructor() {
     this.rom = null;
     this.ram = null;
@@ -27,7 +27,7 @@ class MMU {
   reset() {
     this.ram = new Array(0x9fff).fill(0);
   }
-    
+
   loadRom(rom) {
     this.rom = rom;
   }
@@ -83,7 +83,7 @@ class MMU {
       console.warn(loc + " is read only");
     }
 
-    else { 
+    else {
       this.resolve(loc)[loc] = value;
     }
     return cycles;

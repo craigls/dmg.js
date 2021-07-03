@@ -1,6 +1,6 @@
-/* global hexify, uint16 */
-/* global IE_REG, IF_REG, IF_VBLANK, IF_LCDSTAT,  IF_SERIAL, IF_TIMER */
-/* global IF_JOYPAD, IH_VBLANK, IH_LCDSTAT, IH_SERIAL, IH_TIMER, IH_JOYPAD */
+/* global hexify, uint16, tcBin2Dec */
+/* global IE_REG, IF_REG, IF_VBLANK, IF_STAT,  IF_SERIAL, IF_TIMER */
+/* global IF_JOYPAD, IH_VBLANK, IH_STAT, IH_SERIAL, IH_TIMER, IH_JOYPAD */
 
 const CPU_FLAGS = {
   Z: 128, // zero
@@ -8,7 +8,7 @@ const CPU_FLAGS = {
   H: 32,  // half carry
   C: 16,  // carry
 }
-      
+
 class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
@@ -38,7 +38,6 @@ class CPU {
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
-
   }
 
   setFlag(n) {
@@ -73,15 +72,6 @@ class CPU {
     return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
   }
 
-  // Two's complement to decimal
-  tcBin2Dec(num, bits=8) {
-    let neg = (num & (1 << (bits - 1)));
-    if (neg) {
-      return num | ~((1 << bits) - 1);
-    }
-    return num;
-  }
-
   decode(code) {
     // Decodes an opcode using the algorithm from:
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
@@ -91,7 +81,7 @@ class CPU {
     let z = (code & 0b00000111);
     let p = y >> 1;
     let q = y % 2;
-    
+
     return {x: x, y: y, z: z, p: p, q: q};
 
   }
@@ -113,7 +103,7 @@ class CPU {
         return this.nextByte();
 
       case "r8":
-        return this.tcBin2Dec(this.nextByte());
+        return tcBin2Dec(this.nextByte());
 
       case "(HL)":
         return this.readByte(this.HL());
@@ -122,7 +112,7 @@ class CPU {
         throw new Error("Unknown operand: " + param);
     }
   }
-      
+
   popStack() {
     this.SP++;
     let lo = this.readByte(this.SP);
@@ -173,7 +163,7 @@ class CPU {
     this.PC += offset;
     return cycles;
   }
-  
+
   // Jump relative if not carry
   JRC(offset) {
     let cycles = 8;
@@ -339,7 +329,7 @@ class CPU {
     return cycles;
   }
 
-  // Return if not carry 
+  // Return if not carry
   RETNC() {
     let cycles = 8;
     if (! this.getFlag("C")) {
@@ -349,7 +339,7 @@ class CPU {
     return cycles;
   }
 
-  // Return if carry 
+  // Return if carry
   RETC() {
     let cycles = 8;
     if (this.getFlag("C")) {
@@ -446,7 +436,7 @@ class CPU {
     if (carry) {
       rot |= 1;
     }
-    else { 
+    else {
       rot &= ~1;
     }
 
@@ -466,7 +456,7 @@ class CPU {
     return rot & 0xff;
   }
 
-  // Rotate A register left 
+  // Rotate A register left
   RLA() {
     let rot = this.RL(this.A);
 
@@ -492,7 +482,7 @@ class CPU {
       this.setFlag("C");
       rot |= 1;
     }
-    else { 
+    else {
       rot &= ~bit7;
     }
     if ((rot & 0xff) === 0) {
@@ -565,16 +555,16 @@ class CPU {
     }
     return val & 0xff;
   }
-    
+
   // Rotate right: prev carry to bit 7
   RR(n) {
     let carry = (this.getFlag("C"));
-    let rot = (n >> 1); 
+    let rot = (n >> 1);
 
     if (carry) {
       rot |= (1 << 7);
     }
-    else { 
+    else {
       rot &= ~(1 << 7);
     }
 
@@ -792,7 +782,7 @@ class CPU {
     let addr;
 
     this.cbcode = null;
-    
+
 
     // TODO: Eliminate giant switch statement
 
@@ -882,7 +872,7 @@ class CPU {
         break;
 
       // 0x20  JR NZ,r8  length: 2  cycles: 12,8  flags: ----  group: control/br
-      case 0x20: 
+      case 0x20:
         this.cycles += this.JRNZ(this.read("r8"));
         break;
 
@@ -953,7 +943,7 @@ class CPU {
 
       // 0x07  LD B,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
       case 0x06:
-        this.B = this.read("d8"); 
+        this.B = this.read("d8");
         this.cycles += 8;
         break;
 
@@ -972,7 +962,7 @@ class CPU {
         break;
 
       // 0xc1  POP BC  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xc1: 
+      case 0xc1:
         [this.B, this.C] = this.POP();
         this.cycles += 12;
         break;
@@ -983,7 +973,7 @@ class CPU {
         break;
 
       // 0xd1  POP DE  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xd1: 
+      case 0xd1:
         [this.D, this.E] = this.POP();
         this.cycles += 12;
         break;
@@ -999,7 +989,7 @@ class CPU {
         break;
 
       // 0xe1  POP HL  length: 1  cycles: 12  flags: ----  group: x16/lsm
-      case 0xe1: 
+      case 0xe1:
         [this.H, this.L] = this.POP();
         this.cycles += 12;
         break;
@@ -1066,7 +1056,7 @@ class CPU {
 
       // 0xf3  DI  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0xf3:
-        // TODO: Disable interrupt 
+        // TODO: Disable interrupt
         this.DI();
         this.cycles += 4;
         break;
@@ -1501,13 +1491,13 @@ class CPU {
         this.A = this.SUB(this.A, this[r1]);
         this.cycles += 4;
         break;
-       
+
       // 0x96  SUB (HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
       case 0x96:
         this.A = this.SUB(this.readByte(this.HL()));
         this.cycles += 4;
         break;
-       
+
       case 0x98: // 0x98  SBC A,B  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x99: // 0x99  SBC A,C  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x9a: // 0x9a  SBC A,D  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
@@ -1530,7 +1520,7 @@ class CPU {
         this.a = this.SBC(this.A, this.read("d8"));
         this.cycles += 8;
         break;
-       
+
       // 0xe0  LDH (a8),A  length: 2  cycles: 12  flags: ----  group: x8/lsm
       case 0xe0:
         this.writeByte(this.read("a8"), this.A);
@@ -1599,14 +1589,14 @@ class CPU {
         break;
 
       // cb prefixes
-      case 0xcb: 
+      case 0xcb:
 
         // Get the actual cbcode
         this.cbcode = this.nextByte();
         cbop = this.decode(this.cbcode);
 
         switch(this.cbcode) {
-    
+
           case 0x00: // (cb) 0x00  RLC B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x01: // (cb) 0x01  RLC C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x02: // (cb) 0x02  RLC D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
@@ -1648,13 +1638,13 @@ class CPU {
             this[r1] = this.RL(this[r1]);
             this.cycles += 8;
             break;
-           
+
           // (cb) 0x16  RL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x16:
             this.writeByte(this.HL(), this.RL(this.readByte(this.HL())));
             this.cycles += 16;
             break;
-           
+
           case 0x18: // (cb) 0x18  RR B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x19: // (cb) 0x19  RR C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x1a: // (cb) 0x1a  RR D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
@@ -1667,12 +1657,12 @@ class CPU {
             this.cycles += 8;
             break;
 
-           
+
           case 0x1e: // (cb) 0x1e  RR (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
             this.writeByte(this.HL(), this.RR(this.readByte(this.HL())));
             this.cycles += 16;
             break;
-           
+
           case 0x20: // (cb) 0x20  SLA B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x21: // (cb) 0x21  SLA C  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x22: // (cb) 0x22  SLA D  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
@@ -1684,7 +1674,7 @@ class CPU {
             this[r1] = this.SLA(this[r1]);
             this.cycles += 8;
             break;
-           
+
           // (cb) 0x26  SLA (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x26:
             this.writeByte(this.HL(), this.SLA(this.HL()));
@@ -1702,13 +1692,13 @@ class CPU {
             this[r1] = this.SRA(this[r1]);
             this.cycles += 8;
             break;
-           
+
           // (cb) 0x2e  SRA (HL)  length: 2  cycles: 16  flags: Z000  group: x8/rsb
           case 0x2e:
             this.writeByte(this.HL(), this.SRA(this.readByte(this.HL())));
             this.cycles += 16;
             break;
-           
+
           case 0x40: // (cb) 0x40  BIT 0,B  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
           case 0x41: // (cb) 0x41  BIT 0,C  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
           case 0x42: // (cb) 0x42  BIT 0,D  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
@@ -1811,7 +1801,7 @@ class CPU {
             this[r1] = this.SRL(this[r1]);
             this.cycles += 8;
             break;
-           
+
           case 0x3e: // (cb) 0x3e  SRL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
             this.writeByte(this.HL(), this.SRL(this.readByte(this.HL())));
             this.cycles += 8;
@@ -1873,7 +1863,7 @@ class CPU {
           case 0xbc: // (cb) 0xbc  RES 7,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbd: // (cb) 0xbd  RES 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbf: // (cb) 0xbf  RES 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
-            r1 = this[cbop.z];  
+            r1 = this[cbop.z];
             this[r1] = this.RES(cbop.y, r1);
             this.cycles += 8;
             break
@@ -1963,13 +1953,13 @@ class CPU {
             this.writeByte(this.HL(), this.BIT(cbop.y, this.readByte(this.HL())));
             this.cycles += 16;
             break;
-           
-          default: 
+
+          default:
             throw Error('(cb) ' + hexify(this.cbcode) + ' not found (pc=' + this.PC + ' next=' + hexify(this.readByte(this.PC + 1)) + ')');
         }
         break;
-            
-      default: 
+
+      default:
         throw Error(hexify(code) + ' not found (pc=' + this.PC + ' next=' + hexify(this.readByte(this.PC + 1)) + ')');
     }
     return this.cycles;
@@ -1984,7 +1974,7 @@ class CPU {
     this.IMEEnabled = false;
 
     // Reset IF bit
-    this.writeByte(IE_REG, this.readByte(IE_REG) & ~flag)
+    this.writeByte(IF_REG, this.readByte(IF_REG) & ~flag)
   }
 
   updateInterrupts() {
@@ -1996,8 +1986,8 @@ class CPU {
     if (interrupts & IF_VBLANK) {
       this.handleInterrupt(IH_VBLANK, IF_VBLANK);
     }
-    else if (interrupts & IF_LCDSTAT) {
-      this.handleInterrupt(IH_LCDSTAT, IF_LCDSTAT);
+    else if (interrupts & IF_STAT) {
+      this.handleInterrupt(IH_STAT, IF_STAT);
     }
     else if (interrupts & IF_TIMER) {
       this.handleInterrupt(IH_TIMER, IF_TIMER);
@@ -2010,7 +2000,7 @@ class CPU {
     }
   }
 
-  // CPU update 
+  // CPU update
   update() {
     this.cycles = 0;
     this.prevcode = this.code;

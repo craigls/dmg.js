@@ -17,7 +17,7 @@ class DMG {
     //rom = BOOTROM.concat(TESTROM.slice(0x0100))
     this.mmu.loadRom(rom);
   }
-  
+
   reset() {
     // Reset cycle and frame counts
     this.cycles = 0;
@@ -34,7 +34,7 @@ class DMG {
     let HL = 0x014d;
 
     cpu.A = AF >> 8;
-    cpu.F = AF & 0xff; 
+    cpu.F = AF & 0xff;
     cpu.B = BC >> 8;
     cpu.C = BC & 0xff;
     cpu.D = DE >> 8;

@@ -4,6 +4,7 @@
 /* global LCDC_REG, LCDC_ENABLE, LCDC_WINDOW_TILEMAP LCDC_WINDOW_ENABLE, LCDC_BGWINDOW_TILEDATA */
 /* global LCDC_BG_TILEMAP, LCDC_OBJ_SIZE, LCDC_OBJ_ENABLE, LCDC_BGWINDOW_ENABLE */
 /* global LY_REG, LYC_REG, BGP_REG, OBP0, OBP1 */
+/* global tcBin2Dec */
 
 /* 0x8000 0x8fff: Sprite tiles
  * 0x9800 0x9bff: BG tile map (0)
@@ -49,7 +50,7 @@ class PPU {
     this.tileData = new Array(16);
     this.cycles = 0;
   }
-  
+
   reset() {
     this.x = 0;
     this.y = 0;
@@ -67,7 +68,7 @@ class PPU {
   setStatMode(flag) {
     let stat = this.readByte(STAT_REG);
     stat &= ~STAT_VBLANK_FLAG;
-    stat &= ~STAT_HBLANK_FLAG; 
+    stat &= ~STAT_HBLANK_FLAG;
     stat &= ~STAT_OAM_FLAG;
     stat &= ~STAT_TRANSFER_FLAG;
     stat |= flag;
@@ -139,7 +140,7 @@ class PPU {
   bgColor(n) {
     return DEFAULT_PALETTE[(this.mmu.readByte(BGP_REG) >> (2 * n)) & 0b11];
   }
-    
+
   getTileAtCoords(x, y) {
     // Finds the memory address of tile containing pixel at x, y
     let yTiles = Math.floor(y / TILE_SIZE) * BG_NUM_TILES;
@@ -148,20 +149,28 @@ class PPU {
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
     let tileNum = (xTiles + yTiles) % (BG_NUM_TILES * BG_NUM_TILES);
 
-    // BG tilemap begins at 0x9800;
-    return this.readByte(0x9800 + tileNum);
+    // BG tilemap begins at 0x9800 or 9c000
+    let base = (this.readByte(LCDC_REG) & LCDC_BG_TILEMAP) ? 0x9c00 : 0x9800;
+    return this.readByte(base + tileNum);
   }
 
   getTileData(tileIndex) {
-    // Get tile data for tile id 
+    // Get tile data for tile id
     // Each tile uses 16 bytes of memory
-    
-    // get tile data base address via bit 4 of LCDC register
-    let base = LCDC_REG & LCDC_BG_TILEMAP ? 0x8800 : 0x8000;
-    let address = base + (16 * tileIndex); 
 
+    // When bg/win flag is NOT set:
+    //  tiles 0-127   -> address range 0x9000 - 0x97ff
+    //  tiles 128-255 -> address range 0x8800 - 0x8fff
+    let base;
+
+    if (this.readByte(LCDC_REG) & LCDC_BGWINDOW_TILEDATA) {
+      base = 0x8000 + (16 * tileIndex);
+    }
+    else {
+      base = 0x9000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
+    }
     for (let offset = 0; offset < 16; offset++) {
-      this.tileData[offset] = this.readByte(address + offset);
+      this.tileData[offset] = this.readByte(base + offset);
     }
     return this.tileData;
   }
@@ -184,7 +193,7 @@ class PPU {
     // Draws a pixel for at x, y with an offset
     let x = (xPos + offsetX) % TILE_SIZE;
     let y = (yPos + offsetY) % TILE_SIZE;
-   
+
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
     let left = tile[(y * 2)];
@@ -195,7 +204,7 @@ class PPU {
     let color = (hi << 1) + lo;
     this.drawPixel(xPos, yPos, this.bgColor(color));
   }
-  
+
   drawPixel(x, y, rgb) {
     let data = this.frameBuf.data;
     let offset = (y * FRAMEBUF_WIDTH + x) * 4;

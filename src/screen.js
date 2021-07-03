@@ -14,8 +14,3 @@ class LCDScreen {
     this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
   }
 }
-
-
-  
-  
-

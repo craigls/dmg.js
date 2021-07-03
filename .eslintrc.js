@@ -12,5 +12,6 @@ module.exports = {
   },
   rules: {
     "no-unused-vars": "off",
+    "no-trailing-spaces": "error",
   },
 };

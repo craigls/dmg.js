@@ -16,7 +16,7 @@ class Console {
     return cpu.getFlag("Z") ? "Z" : "-" + cpu.getFlag("N") ? "N" : "-" + cpu.getFlag("H") ? "H" : "-" + cpu.getFlag("C") ? "C" : "-";
   }
 
-  print(text, col, line) { 
+  print(text, col, line) {
     let x = (col * this.colWidth);
     let y = (line * this.lineHeight) + this.lineHeight;
     this.ctx.fillText(text, x, y);
@@ -25,7 +25,7 @@ class Console {
   clear() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
-      
+
   update(dmg) {
     this.clear();
     this.updateRegisters(dmg);
@@ -37,7 +37,7 @@ class Console {
     this.print("cycles=" + dmg.cpu.totalCycles, 10, 6);
   }
 
-  updateRegisters(dmg) { 
+  updateRegisters(dmg) {
     this.print("A=" + dmg.cpu.A, 0, 1);
     this.print("F=" + this.cpuFlagsToText(dmg.cpu), 10, 1)
     this.print("B=" + dmg.cpu.B, 0, 2);
