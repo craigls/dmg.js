@@ -25,6 +25,7 @@
  * bit 2-0: gameboy color only
  *
  */
+"use strict"
 
 const SCROLLY_REG = 0xff42;
 const SCROLLX_REG = 0xff43;

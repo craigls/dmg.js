@@ -1,5 +1,6 @@
 /* global CPU, MMU, PPU, LCDScreen, Console */
 /* global CYCLES_PER_FRAME */
+"use strict"
 
 class DMG {
   constructor(cpu, ppu, mmu, screen, cons) {

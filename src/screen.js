@@ -1,3 +1,5 @@
+"use strict"
+
 const VIEWPORT_WIDTH = 160;
 const VIEWPORT_HEIGHT = 144;
 

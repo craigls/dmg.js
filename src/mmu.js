@@ -17,6 +17,7 @@
  * 0xffff 0xffff: Interrupts Enable Register (IE)
  *
  */
+"use strict"
 
 class MMU {
   constructor() {

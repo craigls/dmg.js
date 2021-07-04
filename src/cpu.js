@@ -1,6 +1,7 @@
 /* global hexify, uint16, tcBin2Dec */
 /* global IE_REG, IF_REG, IF_VBLANK, IF_STAT,  IF_SERIAL, IF_TIMER */
 /* global IF_JOYPAD, IH_VBLANK, IH_STAT, IH_SERIAL, IH_TIMER, IH_JOYPAD */
+"use strict"
 
 const CPU_FLAGS = {
   Z: 128, // zero
@@ -1957,7 +1958,7 @@ class CPU {
           case 0xfd: // (cb) 0xfd  SET 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xff: // (cb) 0xff  SET 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
             r1 = this.r[cbop.z];
-            this.SET(cbop.y, this[r1]);
+            this[r1] = this.SET(cbop.y, this[r1]);
             this.cycles += 8;
             break;
 
