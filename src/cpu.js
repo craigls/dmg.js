@@ -1970,7 +1970,7 @@ class CPU {
           case 0xee: // (cb) 0xee  SET 5,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
           case 0xf6: // (cb) 0xf6  SET 6,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
           case 0xfe: // (cb) 0xfe  SET 7,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
-            this.writeByte(this.HL(), this.BIT(cbop.y, this.readByte(this.HL())));
+            this.writeByte(this.HL(), this.SET(cbop.y, this.readByte(this.HL())));
             this.cycles += 16;
             break;
 
