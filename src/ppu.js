@@ -44,17 +44,20 @@ const DEFAULT_PALETTE = [
 class PPU {
   constructor(mmu) {
     this.mmu = mmu;
-    this.frameBuf = null;
+    this.tileData = new Array(16);
     this.x = 0;
     this.y = 0;
-    this.tileData = new Array(16);
+    this.frameBuf = null;
     this.cycles = 0;
+    this.LCDEnabled = false;
   }
 
   reset() {
     this.x = 0;
     this.y = 0;
     this.frameBuf = new ImageData(FRAMEBUF_WIDTH, FRAMEBUF_HEIGHT);
+    this.cycles = 0;
+    this.LCDEnabled = false;
   }
 
   readByte(loc) {
@@ -92,10 +95,11 @@ class PPU {
 
   update(cycles) {
     this.cycles += cycles;
+    this.LCDEnabled = (this.readByte(LCDC_REG) & LCDC_ENABLE) ? true : false
 
-    // If LCD disabled, clear the screen and return early
-    if (! (this.readByte(LCDC_REG) & LCDC_ENABLE)) {
-      this.frameBuf.data.fill(DEFAULT_PALETTE[0]);
+    // If LCD disabled, clear the screen
+    if (! this.LCDEnabled) {
+      // Returning early here might cause issues but we'll fix later
       return;
     }
 
@@ -177,7 +181,6 @@ class PPU {
 
   drawBackground(x, y) {
     // Draws a single pixel of the BG tilemap for x, y
-
     let scrollX = this.readByte(SCROLLX_REG) % 255;
     let scrollY = this.readByte(SCROLLY_REG) % 255;
 

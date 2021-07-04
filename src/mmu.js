@@ -26,6 +26,37 @@ class MMU {
 
   reset() {
     this.ram = new Array(0x9fff).fill(0);
+
+    // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
+    this.writeByte(0xff07, 0x00);
+    this.writeByte(0xff10, 0x80);
+    this.writeByte(0xff11, 0xbf);
+    this.writeByte(0xff12, 0xf3);
+    this.writeByte(0xff14, 0xbf);
+    this.writeByte(0xff16, 0x3f);
+    this.writeByte(0xff17, 0x00);
+    this.writeByte(0xff19, 0xbf);
+    this.writeByte(0xff1a, 0x7f);
+    this.writeByte(0xff1b, 0xff);
+    this.writeByte(0xff1c, 0x9f);
+    this.writeByte(0xff1e, 0xbf);
+    this.writeByte(0xff20, 0xff);
+    this.writeByte(0xff21, 0x00);
+    this.writeByte(0xff22, 0x00);
+    this.writeByte(0xff23, 0xbf);
+    this.writeByte(0xff24, 0x77);
+    this.writeByte(0xff25, 0xf3);
+    this.writeByte(0xff26, 0xf1);
+    this.writeByte(0xff40, 0x91);
+    this.writeByte(0xff42, 0x00);
+    this.writeByte(0xff43, 0x00);
+    this.writeByte(0xff45, 0x00);
+    this.writeByte(0xff47, 0xfc);
+    this.writeByte(0xff48, 0xff);
+    this.writeByte(0xff49, 0xff);
+    this.writeByte(0xff4a, 0x00);
+    this.writeByte(0xff4b, 0x00);
+    this.writeByte(0xffff, 0x00);
   }
 
   loadRom(rom) {

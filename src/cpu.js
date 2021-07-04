@@ -13,15 +13,6 @@ class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
     this.ppu = ppu;
-
-    // Lookup tables used when decoding certain instructions
-    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
-    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
-    this.rp = ["BC", "DE", "HL", "SP"];
-    this.rp2 = ["BC", "DE", "HL", "AF"];
-  }
-
-  reset() {
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -38,6 +29,38 @@ class CPU {
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
+
+    // Lookup tables used when decoding certain instructions
+    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
+    this.rp = ["BC", "DE", "HL", "SP"];
+    this.rp2 = ["BC", "DE", "HL", "AF"];
+  }
+
+  reset() {
+    this.code = null;
+    this.cbcode = null;
+    this.prevcode = null;
+    this.cycles = 0;
+    this.totalCycles = 0;
+    this.IMEEnabled = false;
+
+    // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
+    let AF = 0x01b0;
+    let BC = 0x0013;
+    let DE = 0x00d8;
+    let HL = 0x014d;
+
+    this.A = AF >> 8;
+    this.F = AF & 0xff;
+    this.B = BC >> 8;
+    this.C = BC & 0xff;
+    this.D = DE >> 8;
+    this.E = DE & 0xff;
+    this.H = HL >> 8;
+    this.L = HL & 0xff;
+    this.SP = 0xfffe;
+    this.PC = 0x100; // Skip checksum routines and begin at ROM address 0x100
   }
 
   setFlag(n) {
@@ -75,7 +98,6 @@ class CPU {
   decode(code) {
     // Decodes an opcode using the algorithm from:
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
-    //
     let x = (code & 0b11000000) >> 6;
     let y = (code & 0b00111000) >> 3;
     let z = (code & 0b00000111);
@@ -83,7 +105,6 @@ class CPU {
     let q = y % 2;
 
     return {x: x, y: y, z: z, p: p, q: q};
-
   }
 
   read(param) {
@@ -780,9 +801,7 @@ class CPU {
     let r2;
     let cbop;
     let addr;
-
     this.cbcode = null;
-
 
     // TODO: Eliminate giant switch statement
 
@@ -1863,7 +1882,7 @@ class CPU {
           case 0xbc: // (cb) 0xbc  RES 7,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbd: // (cb) 0xbd  RES 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbf: // (cb) 0xbf  RES 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
-            r1 = this[cbop.z];
+            r1 = this.r[cbop.z];
             this[r1] = this.RES(cbop.y, r1);
             this.cycles += 8;
             break
