@@ -4,8 +4,6 @@ const CLOCK_SPEED = 4194304
 const FRAMES_PER_SECOND = 60;
 const CYCLES_PER_FRAME = CLOCK_SPEED / FRAMES_PER_SECOND;
 
-// Joypad register
-const JOYP_REG = 0xff00;
 // DMA transfer register
 const OAM_DMA_REG = 0xff46;
 
@@ -60,3 +58,9 @@ const BGP_REG = 0xff47;
 // OBJ palette data
 const OBP0 = 0xff48;
 const OBP1 = 0xff49;
+
+// Joypad
+const JOYP_REG = 0xff00;
+const JOYP_P15 = 0x20; // Bit for b, a, select, start buttons (0 = select)
+const JOYP_P14 = 0x10; // Bit for up, down, left, right (0 = select)
+

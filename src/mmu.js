@@ -1,4 +1,4 @@
-/* global OAM_DMA_REG, JOYP_REG */
+/* global OAM_DMA_REG, JOYP_REG, JOYP_P14, JOYP_P15 */
 /*
  * Memory Map
  * Taken from https://gbdev.io/pandocs
@@ -20,9 +20,10 @@
 "use strict"
 
 class MMU {
-  constructor() {
+  constructor(joypad) {
     this.rom = null;
     this.ram = null;
+    this.joypad = joypad;
   }
 
   reset() {
@@ -64,8 +65,58 @@ class MMU {
     this.rom = rom;
   }
 
+  write(loc, value) {
+    this.resolve(loc)[loc] = value;
+  }
+
+  read(loc) {
+    return this.resolve(loc);
+  }
+
+  readByte(loc) {
+    if (loc == JOYP_REG) {
+      return this.joypad.read();
+    }
+    else {
+      return this.resolve(loc)[loc];
+    }
+  }
+
+  OAMDMATransfer(value) {
+    let src = value << 8;
+    let dst = 0xfe00;
+    for (var n = 0; n < 160; n++) {
+      if (dst == OAM_DMA_REG) {
+        throw new Error("Invalid address for DMA transfer: " + dst);
+      }
+      this.write(dst + n, this.readByte(src + n));
+    }
+  }
+
+  writeByte(loc, value) {
+    let cycles = 0;
+
+    // Selects joypad buttons to read from (dpad or action button)
+    if (loc == JOYP_REG) {
+      this.joypad.write(value);
+    }
+
+    else if (loc == OAM_DMA_REG) {
+      this.OAMDMATransfer(value);
+      cycles = 160; // DMA Transfer takes 160 cycles
+    }
+
+    else if (loc >= 0 && loc <= 0x7fff) {
+      console.warn(loc + " is read only");
+    }
+
+    else {
+      this.write(loc, value);
+    }
+    return cycles;
+  }
+
   resolve(loc) {
-    // ROM
     if (loc >= 0 && loc <= 0x7fff) {
       return this.rom;
     }
@@ -81,43 +132,4 @@ class MMU {
     throw new Error(loc + ' is an invalid memory address');
   }
 
-  readByte(loc) {
-    if (loc == JOYP_REG) {
-      return 0xf; // Temporary hack
-    }
-    return this.resolve(loc)[loc];
-  }
-
-  OAMDMATransfer(value) {
-    let src = value << 8;
-    let dst = 0xfe00;
-    for (var n = 0; n < 160; n++) {
-      if (dst == OAM_DMA_REG) {
-        throw new Error("Invalid address for DMA transfer: " + dst);
-      }
-      this.writeByte(dst + n, this.readByte(src + n));
-    }
-  }
-
-  writeByte(loc, value) {
-    let cycles = 0;
-
-    if (loc == OAM_DMA_REG) {
-      this.OAMDMATransfer(value);
-      cycles = 160; // DMA Transfer takes 160 cycles
-    }
-
-    else if (loc == JOYP_REG) {
-      // Not implemented
-    }
-
-    else if (loc >= 0 && loc <= 0x7fff) {
-      console.warn(loc + " is read only");
-    }
-
-    else {
-      this.resolve(loc)[loc] = value;
-    }
-    return cycles;
-  }
 }

@@ -1,15 +1,28 @@
-/* global CPU, MMU, PPU, LCDScreen, Console */
+/* global CPU, MMU, PPU, LCDScreen, Console, Joypad, CONTROLS */
 /* global CYCLES_PER_FRAME */
 "use strict"
 
+const CONTROLS = {
+  "w": "up",
+  "s": "down",
+  "a": "left",
+  "d": "right",
+  "j": "b",
+  "k": "a",
+  "u": "select",
+  "i": "start",
+}
+
 class DMG {
-  constructor(cpu, ppu, mmu, screen, cons) {
+  constructor(cpu, ppu, mmu, screen, joypad, cons) {
     this.cpu = cpu;
     this.ppu = ppu;
     this.mmu = mmu;
     this.screen = screen;
-    this.cycles_per_frame = CYCLES_PER_FRAME;
+    this.joypad = joypad;
     this.console = cons;
+    this.cycles_per_frame = CYCLES_PER_FRAME;
+    this.started = false;
   }
 
   reset() {
@@ -26,7 +39,7 @@ class DMG {
 
   start() {
     this.reset()
-
+    this.started = true;
     // Start main emulation loop
     this.update();
   }
@@ -49,17 +62,28 @@ class DMG {
     this.nextFrame();
     this.frames++;
   }
+
+  keyPressed(key, state) {
+    let button = CONTROLS[key.toLowerCase()];
+    if (button) {
+      this.joypad.buttonPressed(button, state);
+    }
+  }
 }
+
+
+// TODO: Clean up this code
 
 function createDMG() {
   let screenElem = document.getElementById('screen');
   let consoleElem = document.getElementById('console');
-  let mmu = new MMU();
+  let joypad = new Joypad();
+  let mmu = new MMU(joypad);
   let ppu = new PPU(mmu);
   let screen = new LCDScreen(screenElem, ppu);
   let cpu = new CPU(mmu, ppu);
   let cons = new Console(consoleElem);
-  return new DMG(cpu, ppu, mmu, screen, cons);
+  return new DMG(cpu, ppu, mmu, screen, joypad, cons);
 }
 
 function loadRomFromFile(file) {
@@ -70,9 +94,18 @@ function loadRomFromFile(file) {
     window.dmg.start();
   }
 }
-
-window.createDMG = createDMG;
-window.loadRomFromFile = loadRomFromFile;
-window.onload = () => {
-  window.dmg = window.createDMG();
+function setupInputHandlers() {
+  document.addEventListener('keydown', (e) => {
+    let button = CONTROLS[e.key.toLowerCase()];
+    window.dmg.keyPressed(e.key, true);
+  });
+  document.addEventListener('keyup', (e) => {
+    window.dmg.keyPressed(e.key, false)
+  });
 }
+
+window.onload = () => {
+  window.dmg = createDMG();
+  window.setupInputHandlers();
+}
+
