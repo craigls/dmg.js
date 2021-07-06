@@ -96,7 +96,6 @@ function loadRomFromFile(file) {
 }
 function setupInputHandlers() {
   document.addEventListener('keydown', (e) => {
-    let button = CONTROLS[e.key.toLowerCase()];
     window.dmg.keyPressed(e.key, true);
   });
   document.addEventListener('keyup', (e) => {
