@@ -1,6 +1,7 @@
 /* global hexify, uint16, tcBin2Dec */
 /* global IE_REG, IF_REG, IF_VBLANK, IF_STAT,  IF_SERIAL, IF_TIMER */
 /* global IF_JOYPAD, IH_VBLANK, IH_STAT, IH_SERIAL, IH_TIMER, IH_JOYPAD */
+/* global DIV_REG */
 "use strict"
 
 const CPU_FLAGS = {
@@ -388,7 +389,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("Z");
 
-    // Set Z if bit set
+    // Set Z if bit NOT set
     if ((num & (1 << bit)) === 0) {
       this.setFlag("Z");
     }

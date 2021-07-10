@@ -1,4 +1,4 @@
-/* global OAM_DMA_REG, JOYP_REG, JOYP_P14, JOYP_P15 */
+/* global OAM_DMA_REG, JOYP_REG, JOYP_P14, JOYP_P15, DIV_REG */
 /*
  * Memory Map
  * Taken from https://gbdev.io/pandocs
