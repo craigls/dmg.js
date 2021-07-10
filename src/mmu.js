@@ -27,7 +27,7 @@ class MMU {
   }
 
   reset() {
-    this.ram = new Array(0x9fff).fill(0);
+    this.ram = new Array(0xffff).fill(0);
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
     this.writeByte(0xff07, 0x00);
@@ -101,13 +101,18 @@ class MMU {
       this.joypad.write(value);
     }
 
+    else if (loc == DIV_REG) {
+      // writing any value to DIV resets it to zero
+      this.write(DIV_REG, 0);
+    }
+
     else if (loc == OAM_DMA_REG) {
       this.OAMDMATransfer(value);
       cycles = 160; // DMA Transfer takes 160 cycles
     }
 
     else if (loc >= 0 && loc <= 0x7fff) {
-      console.warn(loc + " is read only");
+      // read only
     }
 
     else {
@@ -120,12 +125,7 @@ class MMU {
     if (loc >= 0 && loc <= 0x7fff) {
       return this.rom;
     }
-    // RAM
     else if (loc >= 0x8000 && loc <= 0xffff) {
-      return this.ram;
-    }
-    // Hardware IO registers
-    else if (loc >= 0xff00 && loc <= 0xff7f) {
       return this.ram;
     }
     // TODO: Implement the other memory segments

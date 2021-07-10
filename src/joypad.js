@@ -35,11 +35,11 @@ class Joypad {
     if (value === (JOYP_P15 | JOYP_P14)) {
       this.buttons = [0xf, 0xf];
     }
-    else if (value === JOYP_P15) {
-      this.select = 1; // action buttons selected
-    }
     else if (value === JOYP_P14) {
-      this.select = 0; // dpad selected
+      this.select = 1; // P14 high = action buttons selected
+    }
+    else if (value === JOYP_P15) {
+      this.select = 0; // P15 high = dpad selected
     }
     else {
       console.error("Joypad write error: " + value);

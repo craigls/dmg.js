@@ -34,11 +34,11 @@ class DMG {
   }
 
   loadRom(rom) {
+    this.reset();
     this.mmu.loadRom(rom);
   }
 
   start() {
-    this.reset()
     this.started = true;
     // Start main emulation loop
     this.update();

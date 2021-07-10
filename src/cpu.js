@@ -390,7 +390,7 @@ class CPU {
 
     // Set Z if bit set
     if ((num & (1 << bit)) === 0) {
-      this.clearFlag("Z");
+      this.setFlag("Z");
     }
     return num;
   }
@@ -1277,7 +1277,7 @@ class CPU {
         this.cycles += this.RETZ();
         break;
 
-     // 0xc9  RET  length: 1  cycles: 16  flags: ----  group: control/br
+      // 0xc9  RET  length: 1  cycles: 16  flags: ----  group: control/br
       case 0xc9:
         this.cycles += this.RET();
         break;
@@ -2020,6 +2020,11 @@ class CPU {
     }
   }
 
+  updateTimers() {
+    // call write() directly to avoid reset of div
+    this.mmu.write(DIV_REG, (this.totalCycles / 16384) & 0xff);
+  }
+
   // CPU update
   update() {
     this.cycles = 0;
@@ -2027,6 +2032,7 @@ class CPU {
     this.code = this.nextByte();
     this.execute(this.code);
     this.updateInterrupts();
+    this.updateTimers();
     this.totalCycles += this.cycles;
     return this.cycles;
   }

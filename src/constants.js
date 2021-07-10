@@ -64,3 +64,6 @@ const JOYP_REG = 0xff00;
 const JOYP_P15 = 0x20; // Bit for b, a, select, start buttons (0 = select)
 const JOYP_P14 = 0x10; // Bit for up, down, left, right (0 = select)
 
+// Timers and dividers
+const DIV_REG = 0xff04;
+
