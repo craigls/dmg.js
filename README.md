@@ -8,6 +8,18 @@ The emulator is able to run Tetris and it is basically playable, but there are b
 and many missing features. This code shouldn't be used as a reference of any kind. 
 It's just for fun.
 
+## Controls
+| key | button |
+|---|--|
+| w | up | 
+| s | down | 
+| a | left | 
+| d | right | 
+| j | b | 
+| k | a | 
+| u | select | 
+| i | start | 
+
 
 ## Useful links
 
