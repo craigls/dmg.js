@@ -413,7 +413,7 @@ class CPU {
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("C");
-    this.clearFlag("H");
+    this.setFlag("H");
 
     if (val === 0) {
       this.setFlag("Z");

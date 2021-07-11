@@ -46,11 +46,13 @@ class PPU {
   constructor(mmu) {
     this.mmu = mmu;
     this.tileData = new Array(16);
+    this.spriteData = new Array(8);
     this.x = 0;
     this.y = 0;
     this.frameBuf = null;
     this.cycles = 0;
     this.LCDEnabled = false;
+    this.shouldUpdateScreen = false
   }
 
   reset() {
@@ -97,6 +99,7 @@ class PPU {
   update(cycles) {
     this.cycles += cycles;
     this.LCDEnabled = (this.readByte(LCDC_REG) & LCDC_ENABLE) ? true : false
+    this.sprite8x16 = (this.readByte(LCDC_REG) & LCDC_OBJ_SIZE);
 
     // If LCD disabled, clear the screen
     if (! this.LCDEnabled) {
@@ -125,13 +128,19 @@ class PPU {
       this.writeByte(IF_REG, this.readByte(IF_REG) & ~IF_VBLANK);
       this.writeByte(STAT_REG, this.readByte(STAT_REG) & ~STAT_VBLANK_FLAG);
       this.y = 0;
+
+      // Trigger screen redraw
+      this.shouldUpdateScreen = true;
     }
+
+    let sprites = this.getSpritesForLine(this.y);
 
     // Draw background pixels for n cycles
     if (this.y < FRAMEBUF_HEIGHT) {
       let end = this.x + cycles;
       while (this.x < FRAMEBUF_WIDTH + 80) { // h-blank for 80 cycles - might be wrong.
         this.drawBackground(this.x, this.y);
+        this.drawSprites(sprites, this.x, this.y);
         this.x++;
         if (this.x == end) {
           break;
@@ -207,6 +216,54 @@ class PPU {
     let lo = (left & bit) ? 1 : 0;
     let color = (hi << 1) + lo;
     this.drawPixel(xPos, yPos, this.bgColor(color));
+  }
+
+  getSpriteOAM(address) {
+    return {
+      y: this.readByte(address),
+      x: this.readByte(address + 1),
+      tileIndex: this.readByte(address + 2),
+      flags: this.readByte(address + 3),
+    }
+  }
+
+  getSpriteData(spriteIndex) {
+    let base = 0x8000 + (16 * spriteIndex);
+    for (let offset = 0; offset < 16; offset++) {
+      this.spriteData[offset] = this.readByte(base + offset);
+    }
+    return this.spriteData;
+  }
+
+  getSpritesForLine(line) {
+    let address = 0xfe00;
+    let sprites = [];
+    let spriteCount = 0;
+
+    for (let n = 0; n < 40; n++) {
+      let curAddress = address + n * 4;
+      let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
+      if (spriteY <= line && spriteY + 8 > line) {
+        sprites.push(this.getSpriteOAM(curAddress));
+        spriteCount++;
+      }
+      // Max 10 sprites per line
+      if (spriteCount > 10) {
+        break;
+      }
+    }
+    return sprites;
+  }
+
+  drawSprites(sprites, x, y) {
+    for (let n = 0; n < sprites.length; n++) {
+      let sprite = sprites[n];
+      let xPos = sprite.x - 8; // sprite.x is horizontal position on screen + 8.
+      if (this.x >= xPos && this.x < xPos + 8) {
+        let tile = this.getSpriteData(sprite.tileIndex);
+        this.drawTile(tile, x, y);
+      }
+    }
   }
 
   drawPixel(x, y, rgb) {

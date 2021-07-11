@@ -12,7 +12,10 @@ class LCDScreen {
     this.ctx = canvas.getContext('2d');
   }
 
-  update(frameBuf) {
-    this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+  update() {
+    if (this.ppu.shouldUpdateScreen) {
+      this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+      this.ppu.shouldUpdateScreen = false;
+    }
   }
 }
