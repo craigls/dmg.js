@@ -2,12 +2,23 @@
 
 I got inspired while watching the youtube channel of Modern Vintage Gamer. 
 In a video, he discusses Game Boy emulation and how it is easy to implement. 
-So I wanted to try it for myself.
+So I wanted to try it for myself. 
 
-Right now this emulator can only load a Tetris ROM and display the credits screen before 
-hitting an infinite loop. How impressive! 
+The emulator is able to run Tetris and it is basically playable, but there are bugs 
+and many missing features. This code shouldn't be used as a reference of any kind. 
+It's just for fun.
 
-Obviously, this project is incomplete and shouldn't be used as a reference of any kind. It's just for fun.
+## Controls
+| key | button |
+|---|--|
+| w | up | 
+| s | down | 
+| a | left | 
+| d | right | 
+| j | b | 
+| k | a | 
+| u | select | 
+| i | start | 
 
 
 ## Useful links
