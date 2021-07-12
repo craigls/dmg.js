@@ -23,62 +23,80 @@ class MMU {
   constructor(joypad) {
     this.rom = null;
     this.ram = null;
+    this.hram = null;
+    this.vram = null;
+    this.xram = null;
+    this.wram = null;
+    this.oam = null;
+    this.io = null
+    this.ie = null;
     this.joypad = joypad;
   }
 
   reset() {
-    this.ram = new Array(0xffff).fill(0);
-
-    // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
-    this.writeByte(0xff07, 0x00);
-    this.writeByte(0xff10, 0x80);
-    this.writeByte(0xff11, 0xbf);
-    this.writeByte(0xff12, 0xf3);
-    this.writeByte(0xff14, 0xbf);
-    this.writeByte(0xff16, 0x3f);
-    this.writeByte(0xff17, 0x00);
-    this.writeByte(0xff19, 0xbf);
-    this.writeByte(0xff1a, 0x7f);
-    this.writeByte(0xff1b, 0xff);
-    this.writeByte(0xff1c, 0x9f);
-    this.writeByte(0xff1e, 0xbf);
-    this.writeByte(0xff20, 0xff);
-    this.writeByte(0xff21, 0x00);
-    this.writeByte(0xff22, 0x00);
-    this.writeByte(0xff23, 0xbf);
-    this.writeByte(0xff24, 0x77);
-    this.writeByte(0xff25, 0xf3);
-    this.writeByte(0xff26, 0xf1);
-    this.writeByte(0xff40, 0x91);
-    this.writeByte(0xff42, 0x00);
-    this.writeByte(0xff43, 0x00);
-    this.writeByte(0xff45, 0x00);
-    this.writeByte(0xff47, 0xfc);
-    this.writeByte(0xff48, 0xff);
-    this.writeByte(0xff49, 0xff);
-    this.writeByte(0xff4a, 0x00);
-    this.writeByte(0xff4b, 0x00);
-    this.writeByte(0xffff, 0x00);
+    this.ram = new Uint8Array(32 * 1024);
+    this.vram = new Uint8Array(8 * 1024);
+    this.xram = new Uint8Array(8 * 1024);
+    this.wram = new Uint8Array(8 * 1024);
+    this.hram = new Uint8Array(128);
+    this.oam = new Uint8Array(128);
+    this.io = new Uint8Array(128);
+    this.ie = 0;
   }
 
   loadRom(rom) {
+    //this.getHeaderInfo(rom);
     this.rom = rom;
   }
 
-  write(loc, value) {
-    this.resolve(loc)[loc] = value;
-  }
-
-  read(loc) {
-    return this.resolve(loc);
-  }
-
   readByte(loc) {
+    // Route to joypad
     if (loc == JOYP_REG) {
       return this.joypad.read();
     }
+
+    // ROM
+    else if (loc >= 0x0000 && loc <= 0x7fff) {
+      return this.rom[loc];
+    }
+
+    // Video RAM
+    else if (loc >= 0x8000 && loc <= 0x9fff) {
+      return this.vram[loc - 0x8000];
+    }
+
+    // Ext. RAM
+    else if (loc >= 0xa000 && loc <= 0xbfff) {
+      return this.xram[loc - 0xa000];
+    }
+
+    // IO registers
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
+      return this.io[loc - 0xff00];
+    }
+
+    // High RAM
+    else if (loc >= 0xff80 && loc <= 0xfffe) {
+      return this.hram[loc - 0xff80];
+    }
+
+    // IE register
+    else if (loc === 0xffff) {
+      return this.ie;
+    }
+
+    // Sprite OAM
+    else if (loc >= 0xfe00 && loc <= 0xfe9f) {
+      return this.oam[loc - 0xfe00];
+    }
+
+    // Work RAM
+    else if (loc >= 0xc000 && loc <= 0xdfff) {
+      return this.wram[loc - 0xc000];
+    }
+
     else {
-      return this.resolve(loc)[loc];
+      console.warn("Invalid memory address: " + loc);
     }
   }
 
@@ -86,10 +104,10 @@ class MMU {
     let src = value << 8;
     let dst = 0xfe00;
     for (var n = 0; n < 160; n++) {
-      if (dst == OAM_DMA_REG) {
+      if (dst < 0x8000) {
         throw new Error("Invalid address for DMA transfer: " + dst);
       }
-      this.write(dst + n, this.readByte(src + n));
+      this.writeByte(dst + n, this.readByte(src + n));
     }
   }
 
@@ -101,35 +119,60 @@ class MMU {
       this.joypad.write(value);
     }
 
+    // Reset DIV register
     else if (loc == DIV_REG) {
-      // writing any value to DIV resets it to zero
-      this.write(DIV_REG, 0);
+      this.io[DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
     }
 
+    // DMA Transfer
     else if (loc == OAM_DMA_REG) {
       this.OAMDMATransfer(value);
       cycles = 160; // DMA Transfer takes 160 cycles
     }
 
-    else if (loc >= 0 && loc <= 0x7fff) {
+    // ROM
+    else if (loc >= 0x0000 && loc <= 0x7fff) {
       // read only
     }
 
+    // Video RAM
+    else if (loc >= 0x8000 && loc <= 0x9fff) {
+      this.vram[loc - 0x8000] = value;
+    }
+
+    // Ext. RAM
+    else if (loc >= 0xa000 && loc <= 0xbfff) {
+      this.xram[loc - 0xa000] = value;
+    }
+
+    // IO registers
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
+      this.io[loc - 0xff00] = value;
+    }
+
+    // Sprite OAM
+    else if (loc >= 0xfe00 && loc <= 0xfe9f) {
+      this.oam[loc - 0xfe00] = value; 
+    }
+
+    // High RAM
+    else if (loc >= 0xff80 && loc <= 0xfffe) {
+      this.hram[loc - 0xff80] = value;
+    }
+
+    // IE register
+    else if (loc === 0xffff) {
+      this.ie = value;
+    }
+
+    // Work RAM
+    else if (loc >= 0xc000 && loc <= 0xdfff) {
+      this.wram[loc - 0xc000] = value;
+    }
+
     else {
-      this.write(loc, value);
+      //console.warn("Invalid memory address: " + loc);
     }
     return cycles;
   }
-
-  resolve(loc) {
-    if (loc >= 0 && loc <= 0x7fff) {
-      return this.rom;
-    }
-    else if (loc >= 0x8000 && loc <= 0xffff) {
-      return this.ram;
-    }
-    // TODO: Implement the other memory segments
-    throw new Error(loc + ' is an invalid memory address');
-  }
-
 }

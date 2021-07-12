@@ -2022,8 +2022,8 @@ class CPU {
   }
 
   updateTimers() {
-    // call write() directly to avoid reset of div
-    this.mmu.write(DIV_REG, (this.totalCycles / 16384) & 0xff);
+    // write to IO directly to avoid reset of div
+    this.mmu.io[DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
   }
 
   // CPU update

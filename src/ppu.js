@@ -45,8 +45,8 @@ const DEFAULT_PALETTE = [
 class PPU {
   constructor(mmu) {
     this.mmu = mmu;
-    this.tileData = new Array(16);
-    this.spriteData = new Array(8);
+    this.tileData = new Uint8Array(16);
+    this.spriteData = new Uint8Array(16);
     this.x = 0;
     this.y = 0;
     this.frameBuf = null;
@@ -238,17 +238,15 @@ class PPU {
   getSpritesForLine(line) {
     let address = 0xfe00;
     let sprites = [];
-    let spriteCount = 0;
 
     for (let n = 0; n < 40; n++) {
       let curAddress = address + n * 4;
       let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + 8 > line) {
         sprites.push(this.getSpriteOAM(curAddress));
-        spriteCount++;
       }
       // Max 10 sprites per line
-      if (spriteCount > 10) {
+      if (sprites.length > 10) {
         break;
       }
     }
