@@ -98,8 +98,8 @@ class PPU {
 
   update(cycles) {
     this.cycles += cycles;
-    this.LCDEnabled = (this.readByte(LCDC_REG) & LCDC_ENABLE) ? true : false
-    this.sprite8x16 = (this.readByte(LCDC_REG) & LCDC_OBJ_SIZE);
+    this.LCDEnabled = this.readByte(LCDC_REG) & LCDC_ENABLE ? true : false;
+    this.spriteHeight = this.readByte(LCDC_REG) & LCDC_OBJ_SIZE ? 16 : 8;
 
     // If LCD disabled, clear the screen
     if (! this.LCDEnabled) {
@@ -242,7 +242,7 @@ class PPU {
     for (let n = 0; n < 40; n++) {
       let curAddress = address + n * 4;
       let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
-      if (spriteY <= line && spriteY + 8 > line) {
+      if (spriteY <= line && spriteY + this.spriteHeight > line) {
         sprites.push(this.getSpriteOAM(curAddress));
       }
       // Max 10 sprites per line

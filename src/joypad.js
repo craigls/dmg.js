@@ -26,7 +26,7 @@ class Joypad {
   buttonPressed(button, state) {
     let [sel, bit] = JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
-    console.log("joypad event: name=" + button + " state=" + state + " buttons: " + this.buttons[sel]);
+    console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
   }
 
   // Switch between reading directional/action buttons

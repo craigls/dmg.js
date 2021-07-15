@@ -6,10 +6,11 @@
 <canvas id="screen"></canvas">
 </div>
 <div>
-<canvas id="console"></canvas">
+<br />
+<input id="rom" type="file" name="rom" accept=".gb" onchange="loadRomFromFile(this.files[0])" />
 </div>
 <div>
-<input id="rom" type="file" name="rom" onchange="loadRomFromFile(this.files[0])" />
+<canvas id="console"></canvas">
 </div>
 <script src="utils.js"></script>
 <script src="console.js"></script>
