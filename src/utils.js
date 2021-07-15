@@ -21,3 +21,7 @@ function tcBin2Dec(num, bits=8) {
   }
   return num;
 }
+
+function getText(charCodes) {
+  return charCodes.reduce((acc, cur) => acc + ((cur > 0) ? String.fromCharCode(cur) : ''), '');
+}

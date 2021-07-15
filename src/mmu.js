@@ -21,7 +21,9 @@
 
 class MMU {
   constructor(joypad) {
-    this.rom = null;
+    this.header = {};
+    this.rom1 = null;
+    this.rom2 = null;
     this.ram = null;
     this.hram = null;
     this.vram = null;
@@ -34,6 +36,7 @@ class MMU {
   }
 
   reset() {
+    this.header = {};
     this.ram = new Uint8Array(32 * 1024);
     this.vram = new Uint8Array(8 * 1024);
     this.xram = new Uint8Array(8 * 1024);
@@ -45,8 +48,28 @@ class MMU {
   }
 
   loadRom(rom) {
-    //this.getHeaderInfo(rom);
-    this.rom = rom;
+    this.header = this.readHeader(rom);
+    this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
+    this.rom2 = new Uint8Array(rom.slice(16 * 1024));
+    this.bank = [0, 0];
+  }
+
+  readHeader(rom) {
+    return {
+      title: getText(rom.slice(0x0134, 0x0144)),
+      mfr: getText(rom.slice(0x013f, 0x0143)),
+      cgb: rom[0x0143],
+      newLicense: rom.slice(0x0144, 0x0146),
+      sgb: rom[0x0146],
+      mbcType: rom[0x0147],
+      romSize: rom[0x0148],
+      ramSize: rom[0x0148],
+      dest: rom[0x014a],
+      license: rom[0x014b],
+      ver: rom[0x014c],
+      checksum1: rom[0x014d],
+      checksum2: rom.slice(0x014e, 0x0150),
+    }
   }
 
   readByte(loc) {
@@ -55,9 +78,14 @@ class MMU {
       return this.joypad.read();
     }
 
-    // ROM
-    else if (loc >= 0x0000 && loc <= 0x7fff) {
-      return this.rom[loc];
+    // ROM 1
+    else if (loc >= 0x0000 && loc <= 0x3fff) {
+      return this.rom1[loc];
+    }
+
+    // ROM 2
+    else if (loc >= 0x4000 && loc <= 0x7fff) {
+      return this.rom2[loc - 0x4000];
     }
 
     // Video RAM
@@ -134,6 +162,7 @@ class MMU {
     else if (loc >= 0x0000 && loc <= 0x7fff) {
       // read only
     }
+
 
     // Video RAM
     else if (loc >= 0x8000 && loc <= 0x9fff) {

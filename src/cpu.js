@@ -32,11 +32,19 @@ class CPU {
     this.cycles = 0;
     this.IMEEnabled = false;
 
+    this.flags = {
+      Z: 128, // zero
+      N: 64,  // subtraction
+      H: 32,  // half carry
+      C: 16,  // carry
+    }
+
     // Lookup tables used when decoding certain instructions
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
     this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
     this.rp = ["BC", "DE", "HL", "SP"];
     this.rp2 = ["BC", "DE", "HL", "AF"];
+
   }
 
   reset() {
@@ -46,38 +54,21 @@ class CPU {
     this.cycles = 0;
     this.totalCycles = 0;
     this.IMEEnabled = false;
-
-    // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
-    let AF = 0x01b0;
-    let BC = 0x0013;
-    let DE = 0x00d8;
-    let HL = 0x014d;
-
-    this.A = AF >> 8;
-    this.F = AF & 0xff;
-    this.B = BC >> 8;
-    this.C = BC & 0xff;
-    this.D = DE >> 8;
-    this.E = DE & 0xff;
-    this.H = HL >> 8;
-    this.L = HL & 0xff;
-    this.SP = 0xfffe;
-    this.PC = 0x100; // Skip checksum routines and begin at ROM address 0x100
   }
 
-  setFlag(n) {
-    this.F |= CPU_FLAGS[n];
+  setFlag(f) {
+    this.F |= this.flags[f];
   }
 
-  clearFlag(n) {
-    this.F &= ~CPU_FLAGS[n];
+  clearFlag(f) {
+    this.F &= ~this.flags[f];
   }
 
-  getFlag(n) {
-    if (CPU_FLAGS[n] === undefined) {
-      throw new Error("Invalid flag!");
+  getFlag(f) {
+    if (this.flags[f] === undefined) { // sanity check
+      throw new Error("Invalid flag! " + f);
     }
-    return ((this.F & CPU_FLAGS[n]) !== 0) ? true : false;
+    return ((this.F & this.flags[f]) !== 0) ? true : false;
   }
 
   readByte(loc) {
@@ -134,7 +125,7 @@ class CPU {
       default:
         throw new Error("Unknown operand: " + param);
     }
-  }
+  } 
 
   popStack() {
     this.SP++;
@@ -407,8 +398,8 @@ class CPU {
   }
 
   // AND
-  AND(b) {
-    let val = this.A & b;
+  AND(n) {
+    let val = this.A & n;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -429,10 +420,10 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (val === 0) {
+    if ((val & 0xff) === 0) {
       this.setFlag("Z");
     }
-    return val;
+    return val & 0xff;
   }
 
   // XOR
@@ -444,10 +435,10 @@ class CPU {
     this.clearFlag("C");
 
     // Set Z == 0 if zero
-    if (val === 0) {
+    if ((val & 0xff) === 0) {
       this.setFlag("Z");
     }
-    return val;
+    return val & 0xff;
   }
 
   // Rotate left, prev carry bit to bit 0
@@ -516,9 +507,9 @@ class CPU {
 
   // Shift right: bit 0 to carry, bit 7 reset to 0
   SRL(n) {
-    let val = n >> 1;
+    let val = (n >> 1) & ~(1 << 7);
     let bit0 = n & (1 << 0);
-
+    
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("C");
@@ -704,7 +695,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if ((hi << 8) + lo > (255 << 8)) {
+    if ((hi << 8) + lo > 65535) {
       this.setFlag("C");
     }
     if (this.isHalfCarry(a1, b1 + carryLo)) {
@@ -775,7 +766,7 @@ class CPU {
   CPL() {
     this.setFlag("N");
     this.setFlag("H");
-    this.A = ~this.A;
+    this.A = ~this.A & 0xff;
     return this.A;
   }
 
