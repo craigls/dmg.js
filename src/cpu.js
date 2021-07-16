@@ -377,7 +377,7 @@ class CPU {
   // Test if n-th bit is set
   BIT(bit, num) {
     this.clearFlag("N");
-    this.clearFlag("H");
+    this.setFlag("H");
     this.clearFlag("Z");
 
     // Set Z if bit NOT set
@@ -732,7 +732,7 @@ class CPU {
     this.clearFlag("Z");
     this.clearFlag("H");
     this.clearFlag("C");
-    this.clearFlag("N");
+    this.setFlag("N");
 
     if (val < 0) {
       this.setFlag("C");
@@ -781,10 +781,10 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (result === 0) {
+    if ((result & 0xff) === 0) {
       this.setFlag("Z");
     }
-    return result;
+    return result & 0xff;
   }
 
   // Execute instructions
@@ -1160,7 +1160,7 @@ class CPU {
 
       // 0xa6  AND (HL)  length: 1  cycles: 8  flags: Z010  group: x8/alu
       case 0xa6:
-        this.A = this.readByte(this.HL());
+        this.A = this.AND(readByte(this.HL()));
         this.cycles += 8;
         break;
 
