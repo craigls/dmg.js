@@ -220,11 +220,17 @@ class PPU {
   }
 
   getSpriteOAM(address) {
+    let flags = this.readByte(address + 3);
     return {
       y: this.readByte(address),
       x: this.readByte(address + 1),
       tileIndex: this.readByte(address + 2),
-      flags: this.readByte(address + 3),
+      bgPriority: flags & (1 << 7) ? 1 : 0,
+      flipY: flags & (1 << 6) ? 1 : 0,
+      flipX: flags & (1 << 5) ? 1 : 0,
+      palette: flags & (1 << 4) ? 1 : 0,
+      cgbVramBank: flags & (1 << 3) ? 1 : 0,
+      cgbPalette: flags & 0b11,
     }
   }
 
@@ -257,12 +263,17 @@ class PPU {
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
       let sprite = sprites[n];
-      let spriteX = sprite.x - 8; // sprite.x is horizontal position on screen + 8
-      let spriteY = sprite.y - 16; // sprite.y is vertical position on screen + 16
-      if (x >= spriteX && x < spriteX + 8) {
+      if (x >= sprite.x - 8 && x < sprite.x) {
         let tile = this.getSpriteData(sprite.tileIndex);
-        let tileX = x - spriteX;
-        let tileY = y - spriteY;
+        let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
+        let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
+
+        if (sprite.flipX) {
+          tileX = 7 - tileX;
+        }
+        if (sprite.flipY) {
+          tileY = (this.spriteHeight - 1) - tileY;
+        }
         this.drawTile(tile, tileX, tileY, x, y);
       }
     }
