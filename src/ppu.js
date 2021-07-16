@@ -199,23 +199,24 @@ class PPU {
 
     let tileIndex = this.getTileAtCoords(x + scrollX, y + scrollY);
     let tile = this.getTileData(tileIndex);
-    this.drawTile(tile, x, y, offsetX, offsetY);
+    let tileX = (x + offsetX) % TILE_SIZE;
+    let tileY = (y + offsetY) % TILE_SIZE;
+
+    this.drawTile(tile, tileX, tileY, x, y);
   }
 
-  drawTile(tile, xPos, yPos, offsetX=0, offsetY=0) {
-    // Draws a pixel for at x, y with an offset
-    let x = (xPos + offsetX) % TILE_SIZE;
-    let y = (yPos + offsetY) % TILE_SIZE;
+  drawTile(tile, tileX, tileY, posX, posY) {
+    // Draws a single pixel of a tile at screen location x, y
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
-    let left = tile[(y * 2)];
-    let right = tile[(y * 2) + 1];
-    let bit = (1 << (7 - x));
-    let hi = (right & bit) ? 1 : 0;
-    let lo = (left & bit) ? 1 : 0;
+    let left = tile[tileY * 2];
+    let right = tile[(tileY * 2) + 1];
+    let bit = 1 << 7 - tileX;
+    let hi = right & bit ? 1 : 0;
+    let lo = left & bit ? 1 : 0;
     let color = (hi << 1) + lo;
-    this.drawPixel(xPos, yPos, this.bgColor(color));
+    this.drawPixel(posX, posY, this.bgColor(color));
   }
 
   getSpriteOAM(address) {
@@ -256,10 +257,13 @@ class PPU {
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
       let sprite = sprites[n];
-      let xPos = sprite.x - 8; // sprite.x is horizontal position on screen + 8.
-      if (this.x >= xPos && this.x < xPos + 8) {
+      let spriteX = sprite.x - 8; // sprite.x is horizontal position on screen + 8
+      let spriteY = sprite.y - 16; // sprite.y is vertical position on screen + 16
+      if (x >= spriteX && x < spriteX + 8) {
         let tile = this.getSpriteData(sprite.tileIndex);
-        this.drawTile(tile, x, y);
+        let tileX = x - spriteX;
+        let tileY = y - spriteY;
+        this.drawTile(tile, tileX, tileY, x, y);
       }
     }
   }
