@@ -103,7 +103,7 @@ class DMG {
     this.cycles += total;
     this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
-    //requestAnimationFrame(() => this.console ? this.console.update(this) : {});
+    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
   }
 
   update() {
