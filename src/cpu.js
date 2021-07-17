@@ -178,7 +178,7 @@ class CPU {
     return cycles;
   }
 
-  // Jump relative if not carry
+  // Jump relative if carry
   JRC(offset) {
     let cycles = 8;
     if (this.getFlag("C")) {
@@ -553,7 +553,7 @@ class CPU {
 
   // Shift left: bit 7 to carry, bit 0 reset to 0
   SLA(n) {
-    let val = ((n << 1) & ~(1 << 0))
+    let val = (n << 1) & ~(1 << 0)
     let bit7 = n & (1 << 7);
 
     this.clearFlag("Z");
@@ -1160,7 +1160,7 @@ class CPU {
 
       // 0xa6  AND (HL)  length: 1  cycles: 8  flags: Z010  group: x8/alu
       case 0xa6:
-        this.A = this.AND(readByte(this.HL()));
+        this.A = this.AND(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
