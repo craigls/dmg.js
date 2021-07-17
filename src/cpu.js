@@ -420,10 +420,10 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if ((val & 0xff) === 0) {
+    if (val === 0) {
       this.setFlag("Z");
     }
-    return val & 0xff;
+    return val;
   }
 
   // XOR
@@ -572,7 +572,7 @@ class CPU {
 
   // Rotate right: prev carry to bit 7
   RR(n) {
-    let carry = (this.getFlag("C"));
+    let carry = this.getFlag("C");
     let rot = (n >> 1);
 
     if (carry) {
@@ -660,7 +660,7 @@ class CPU {
   // Decrement
   DEC(n) {
     let val = n - 1;
-    this.clearFlag("N");
+    this.setFlag("N");
     this.clearFlag("H");
     this.clearFlag("Z");
 
@@ -682,7 +682,7 @@ class CPU {
 
   // Addition of a + b + carry bit
   ADC(a, b) {
-    let carry = (this.getFlag("C")) ? 1 : 0;
+    let carry = this.getFlag("C") ? 1 : 0;
     return this.ADD(a, b + carry);
   }
 
