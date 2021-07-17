@@ -4,13 +4,6 @@
 /* global DIV_REG */
 "use strict"
 
-const CPU_FLAGS = {
-  Z: 128, // zero
-  N: 64,  // subtraction
-  H: 32,  // half carry
-  C: 16,  // carry
-}
-
 class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
@@ -681,9 +674,9 @@ class CPU {
   }
 
   // Addition of a + b + carry bit
-  ADC(a, b) {
+  ADC(b) {
     let carry = this.getFlag("C") ? 1 : 0;
-    return this.ADD(a, b + carry);
+    return this.ADD(this.A, b + carry);
   }
 
   ADD16(a1, a2, b1, b2) {
@@ -1275,7 +1268,7 @@ class CPU {
         break;
 
       case 0xce: // 0xce  ADC A,d8  length: 2  cycles: 8  flags: Z0HC  group: x8/alu
-        this.A = this.ADC(this.A, this.read("d8"));
+        this.A = this.ADC(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -1488,7 +1481,7 @@ class CPU {
       case 0x8f: // 0x8f  ADC A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x8c: // 0x8c  ADC A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.ADC(this.A, this[r1]);
+        this.A = this.ADC(this[r1]);
         this.cycles += 4;
         break;
 
