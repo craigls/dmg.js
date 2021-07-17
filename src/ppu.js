@@ -101,12 +101,6 @@ class PPU {
     this.LCDEnabled = this.readByte(LCDC_REG) & LCDC_ENABLE ? true : false;
     this.spriteHeight = this.readByte(LCDC_REG) & LCDC_OBJ_SIZE ? 16 : 8;
 
-    // If LCD disabled, clear the screen
-    if (! this.LCDEnabled) {
-      // Returning early here might cause issues but we'll fix later
-      return;
-    }
-
     if (this.x >= FRAMEBUF_WIDTH) {
       this.x = 0;
       this.y++;
@@ -130,7 +124,10 @@ class PPU {
       this.y = 0;
 
       // Trigger screen redraw
-      this.shouldUpdateScreen = true;
+      // TODO: Probably wrong - Confirm if PPU should continue running when LCD disabled
+      if (this.LCDEnabled) {
+        this.shouldUpdateScreen = true;
+      }
     }
 
     let sprites = this.getSpritesForLine(this.y);
@@ -151,8 +148,8 @@ class PPU {
     this.writeByte(LYC_REG, this.y);
   }
 
-  bgColor(n) {
-    return DEFAULT_PALETTE[(this.mmu.readByte(BGP_REG) >> (2 * n)) & 0b11];
+  getColorRGB(colorId, palette) {
+    return DEFAULT_PALETTE[(palette >> (2 * colorId)) & 0b11];
   }
 
   getTileAtCoords(x, y) {
@@ -202,10 +199,12 @@ class PPU {
     let tileX = (x + offsetX) % TILE_SIZE;
     let tileY = (y + offsetY) % TILE_SIZE;
 
-    this.drawTile(tile, tileX, tileY, x, y);
+    let colorId = this.getPixelColor(tile, tileX, tileY);
+    let rgb = this.getColorRGB(colorId, this.readByte(BGP_REG));
+    this.drawPixel(x, y, rgb);
   }
 
-  drawTile(tile, tileX, tileY, posX, posY) {
+  getPixelColor(tile, tileX, tileY) {
     // Draws a single pixel of a tile at screen location x, y
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
@@ -215,8 +214,7 @@ class PPU {
     let bit = 1 << 7 - tileX;
     let hi = right & bit ? 1 : 0;
     let lo = left & bit ? 1 : 0;
-    let color = (hi << 1) + lo;
-    this.drawPixel(posX, posY, this.bgColor(color));
+    return (hi << 1) + lo;
   }
 
   getSpriteOAM(address) {
@@ -228,7 +226,7 @@ class PPU {
       bgPriority: flags & (1 << 7) ? 1 : 0,
       flipY: flags & (1 << 6) ? 1 : 0,
       flipX: flags & (1 << 5) ? 1 : 0,
-      palette: flags & (1 << 4) ? 1 : 0,
+      obp: flags & (1 << 4) ? 1 : 0,
       cgbVramBank: flags & (1 << 3) ? 1 : 0,
       cgbPalette: flags & 0b11,
     }
@@ -274,7 +272,10 @@ class PPU {
         if (sprite.flipY) {
           tileY = (this.spriteHeight - 1) - tileY;
         }
-        this.drawTile(tile, tileX, tileY, x, y);
+        let colorId = this.getPixelColor(tile, tileX, tileY);
+        if (colorId == 0) continue; // transparent pixel
+        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? OBP1 : OBP0) & 0xfc);
+        this.drawPixel(x, y, rgb);
       }
     }
   }
