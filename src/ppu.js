@@ -146,7 +146,14 @@ class PPU {
       }
     }
     this.writeByte(LY_REG, this.y);
-    this.writeByte(LYC_REG, this.y);
+
+    // Check if STAT interrupt LYC=LY should be triggered
+    let lyc = this.readByte(LYC_REG);
+    let lycEqual = this.readByte(STAT_REG) & STAT_LYCLY_FLAG ? lyc === this.y : lyc !== this.y;
+    if (lycEqual) {
+      this.writeByte(IF_REG, this.readByte(IF_REG) | IF_STAT);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) | STAT_LYCLY_INT);
+    }
   }
 
   getColorRGB(colorId, palette) {
