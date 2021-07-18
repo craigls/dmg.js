@@ -37,7 +37,7 @@ const FRAMEBUF_HEIGHT = 256;
 
 const DEFAULT_PALETTE = [
   [155, 188, 15], // lightest
-  [139, 172, 15], // light
+  [139, 172, 10], // light
   [48,  98,  48], // dark
   [15,  56,  15], // darkest
 ];
@@ -73,10 +73,7 @@ class PPU {
 
   setStatMode(flag) {
     let stat = this.readByte(STAT_REG);
-    stat &= ~STAT_VBLANK_FLAG;
-    stat &= ~STAT_HBLANK_FLAG;
-    stat &= ~STAT_OAM_FLAG;
-    stat &= ~STAT_TRANSFER_FLAG;
+    stat &= ~(STAT_VBLANK_FLAG | STAT_HBLANK_FLAG | STAT_OAM_FLAG | STAT_TRANSFER_FLAG);
     stat |= flag;
     this.writeByte(STAT_REG, stat);
   }
@@ -101,6 +98,13 @@ class PPU {
     this.LCDEnabled = this.readByte(LCDC_REG) & LCDC_ENABLE ? true : false;
     this.spriteHeight = this.readByte(LCDC_REG) & LCDC_OBJ_SIZE ? 16 : 8;
 
+    if (! this.LCDEnabled) {
+      // Reset LY, stat mode and return early
+      this.writeByte(LY_REG, 0);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) & ~3);
+      return;
+    }
+
     if (this.x >= FRAMEBUF_WIDTH) {
       this.x = 0;
       this.y++;
@@ -124,10 +128,7 @@ class PPU {
       this.y = 0;
 
       // Trigger screen redraw
-      // TODO: Probably wrong - Confirm if PPU should continue running when LCD disabled
-      if (this.LCDEnabled) {
-        this.shouldUpdateScreen = true;
-      }
+      this.shouldUpdateScreen = true;
     }
 
     let sprites = this.getSpritesForLine(this.y);
@@ -273,8 +274,10 @@ class PPU {
           tileY = (this.spriteHeight - 1) - tileY;
         }
         let colorId = this.getPixelColor(tile, tileX, tileY);
-        if (colorId == 0) continue; // transparent pixel
-        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? OBP1 : OBP0) & 0xfc);
+        if (colorId == 0) { 
+          continue; // transparent pixel
+        }
+        let rgb = this.getColorRGB(colorId, this.readByte(OBP0 + sprite.obp));
         this.drawPixel(x, y, rgb);
       }
     }
