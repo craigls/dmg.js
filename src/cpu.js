@@ -436,7 +436,7 @@ class CPU {
 
   // Rotate left, prev carry bit to bit 0
   RL(n) {
-    let carry = (this.getFlag("C"));
+    let carry = this.getFlag("C");
     let rot = (n << 1);
 
     // Previous carry is copied to bit zero
@@ -676,30 +676,29 @@ class CPU {
   // Addition of a + b + carry bit
   ADC(b) {
     let carry = this.getFlag("C") ? 1 : 0;
-    return this.ADD(this.A, b + carry);
+    return this.ADD(b + carry);
   }
 
   ADD16(a1, a2, b1, b2) {
     let carryLo = (a2 + b2 > 255) ? 1 : 0;
-    let hi = a1 + b1 + carryLo;
-    let lo = a2 + b2;
+    let val = uint16(a1, a2) + uint16(b1, b2);
 
     this.clearFlag("N");
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if ((hi << 8) + lo > 65535) {
+    if (val > 65535) {
       this.setFlag("C");
     }
     if (this.isHalfCarry(a1, b1 + carryLo)) {
       this.setFlag("H");
     }
-    return [hi & 0xff, lo & 0xff];
+    return [(val >> 8) & 0xff, val & 0xff];
   }
 
   // Addition
-  ADD(a, b) {
-    let val = a + b;
+  ADD(b) {
+    let val = this.A + b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -712,15 +711,15 @@ class CPU {
     if (val > 255) {
       this.setFlag("C");
     }
-    if (this.isHalfCarry(a, b)) {
+    if (this.isHalfCarry(this.A, b)) {
       this.setFlag("H");
     }
     return val & 0xff;
   }
 
   // Subtraction
-  SUB(a, b) {
-    let val = a - b;
+  SUB(b) {
+    let val = this.A - b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -730,18 +729,19 @@ class CPU {
     if (val < 0) {
       this.setFlag("C");
     }
-    if (this.isHalfCarry(a, -b)) {
+    if (this.isHalfCarry(this.A, -b)) {
       this.setFlag("H");
     }
-    if (a === b) {
+    if (this.A === b) {
       this.setFlag("Z");
     }
     return val & 0xff;
   }
 
   // Subtraction: a - (b + carry bit)
-  SBC(a, b) {
-    return this.SUB(a, b + (this.getFlag("C")) ? 1 : 0);
+  SBC(b) {
+    let carry = this.getFlag("C") ? 1 : 0;
+    return this.SUB(b + carry);
   }
 
   // Restart command - jump to preset address
@@ -752,7 +752,7 @@ class CPU {
 
   // Subtraction from A that sets flags without modifying A
   CP(n) {
-    return this.SUB(this.A, n);
+    return this.SUB(n);
   }
 
   // Flip bits in A register, set N and H flags
@@ -936,7 +936,7 @@ class CPU {
 
       // 0xc6  ADD A,d8  length: 2  cycles: 8  flags: Z0HC  group: x8/alu
       case 0xc6:
-        this.A = this.ADD(this.A, this.read("d8"));
+        this.A = this.ADD(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -1044,7 +1044,7 @@ class CPU {
 
       // 0xd6  SUB d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
       case 0xd6:
-        this.A = this.SUB(this.A, this.read("d8"));
+        this.A = this.SUB(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -1463,13 +1463,13 @@ class CPU {
       case 0x85: // 0x85  ADD A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x87: // 0x87  ADD A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.ADD(this.A, this[r1]);
+        this.A = this.ADD(this[r1]);
         this.cycles += 8;
         break;
 
       // 0x86  ADD A,(HL)  length: 1  cycles: 8  flags: Z0HC  group: x8/alu
       case 0x86:
-        this.A = this.ADD(this.A, this.readByte(this.HL()));
+        this.A = this.ADD(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
@@ -1493,7 +1493,7 @@ class CPU {
       case 0x95: // 0x95  SUB L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x97: // 0x97  SUB A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.SUB(this.A, this[r1]);
+        this.A = this.SUB(this[r1]);
         this.cycles += 4;
         break;
 
