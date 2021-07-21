@@ -1,8 +1,6 @@
-/* global hexify */
-"use strict"
 
 class Console {
-  constructor(canvas, height, width) {
+  constructor(canvas) {
     this.canvas = canvas;
     this.canvas.width = 500;
     this.canvas.height = 200;

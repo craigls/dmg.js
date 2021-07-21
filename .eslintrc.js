@@ -11,6 +11,7 @@ module.exports = {
     sourceType: 'module',
   },
   rules: {
+    "no-implicit-globals": "off",
     "no-unused-vars": "off",
     "no-trailing-spaces": "error",
   },

@@ -1,4 +1,3 @@
-/* global OAM_DMA_REG, JOYP_REG, JOYP_P14, JOYP_P15, DIV_REG */
 /*
  * Memory Map
  * Taken from https://gbdev.io/pandocs
@@ -17,11 +16,9 @@
  * 0xffff 0xffff: Interrupts Enable Register (IE)
  *
  */
-"use strict"
 
 class MMU {
   constructor(joypad) {
-    this.header = {};
     this.rom1 = null;
     this.rom2 = null;
     this.ram = null;
@@ -33,10 +30,14 @@ class MMU {
     this.io = null
     this.ie = null;
     this.joypad = joypad;
+    this.mbcType = null;
+    this.bankNum1 = null;
+    this.bankNum2 = null;
+    this.bankMode = null;
+    this.ramEnabled = false;
   }
 
   reset() {
-    this.header = {};
     this.ram = new Uint8Array(32 * 1024);
     this.vram = new Uint8Array(8 * 1024);
     this.xram = new Uint8Array(8 * 1024);
@@ -45,13 +46,18 @@ class MMU {
     this.oam = new Uint8Array(128);
     this.io = new Uint8Array(128);
     this.ie = 0;
+    this.mbcType = 0;
+    this.bankNum1 = 1;
+    this.bankNum2 = 1;
+    this.bankMode = 0;
+    this.ramEnabled = false;
   }
 
   loadRom(rom) {
-    this.header = this.readHeader(rom);
+    let header = this.readHeader(rom);
+    this.mbcType = header.mbcType;
     this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
     this.rom2 = new Uint8Array(rom.slice(16 * 1024));
-    this.bank = [0, 0];
   }
 
   readHeader(rom) {
@@ -85,7 +91,13 @@ class MMU {
 
     // ROM 2
     else if (loc >= 0x4000 && loc <= 0x7fff) {
-      return this.rom2[loc - 0x4000];
+      // Memory bank switching is a work in progress!
+      if (this.mbcType) {
+        return this.rom2[(loc - 0x4000) * this.bankNum1];
+      }
+      else {
+        return this.rom2[loc - 0x4000];
+      }
     }
 
     // Video RAM
@@ -128,18 +140,9 @@ class MMU {
     }
   }
 
-  OAMDMATransfer(value) {
-    let src = value << 8;
-    let dst = 0xfe00;
-    for (var n = 0; n < 160; n++) {
-      if (dst < 0x8000) {
-        throw new Error("Invalid address for DMA transfer: " + dst);
-      }
-      this.writeByte(dst + n, this.readByte(src + n));
-    }
-  }
-
   writeByte(loc, value) {
+    // Note: Ordering of if/else blocks matters here
+
     let cycles = 0;
 
     // Selects joypad buttons to read from (dpad or action button)
@@ -158,22 +161,6 @@ class MMU {
       cycles = 160; // DMA Transfer takes 160 cycles
     }
 
-    // ROM
-    else if (loc >= 0x0000 && loc <= 0x7fff) {
-      // read only
-    }
-
-
-    // Video RAM
-    else if (loc >= 0x8000 && loc <= 0x9fff) {
-      this.vram[loc - 0x8000] = value;
-    }
-
-    // Ext. RAM
-    else if (loc >= 0xa000 && loc <= 0xbfff) {
-      this.xram[loc - 0xa000] = value;
-    }
-
     // IO registers
     else if (loc >= 0xff00 && loc <= 0xff7f) {
       this.io[loc - 0xff00] = value;
@@ -181,7 +168,7 @@ class MMU {
 
     // Sprite OAM
     else if (loc >= 0xfe00 && loc <= 0xfe9f) {
-      this.oam[loc - 0xfe00] = value; 
+      this.oam[loc - 0xfe00] = value;
     }
 
     // High RAM
@@ -194,14 +181,59 @@ class MMU {
       this.ie = value;
     }
 
+    // Video RAM
+    else if (loc >= 0x8000 && loc <= 0x9fff) {
+      this.vram[loc - 0x8000] = value;
+    }
+
+    // Ext. RAM
+    else if (loc >= 0xa000 && loc <= 0xbfff) {
+      this.xram[loc - 0xa000] = value;
+    }
+
     // Work RAM
     else if (loc >= 0xc000 && loc <= 0xdfff) {
       this.wram[loc - 0xc000] = value;
+    }
+
+    // Memory bank switching is a work in progress!
+    else if (this.mbcType) {
+      // MBC1: 0000-1FFF - RAM Enable
+      if (loc >= 0x0000 && loc <= 0x1fff) {
+        this.ramEnabled = (value & 0xa) ? true : false;
+      }
+      // MBC1: 2000-3FFF - ROM Bank Number
+      else if (loc >= 0x2000 && loc <= 0x3fff) {
+        this.bankNum1 = (value & 0x1f) || 1; // bank 0 invalid - should set to 1 instead
+      }
+      // MBC1: 4000-5FFF - RAM Bank Number or Upper Bits of ROM Bank Number
+      else if (loc >= 0x4000 && 0x5ffff) {
+        this.bankNum2 = value & 0xb11;
+      }
+      // MBC1: 6000-7FFF - Banking Mode Select
+      else if (loc >= 0x6000 && loc <= 0x7fff) {
+        this.bankMode = value & 1;
+      }
+    }
+
+    else if (loc >= 0x0000 && loc <= 0x7fff) {
+      // read only
     }
 
     else {
       //console.warn("Invalid memory address: " + loc);
     }
     return cycles;
+  }
+
+  OAMDMATransfer(value) {
+    let src = value << 8;
+    let dst = 0xfe00;
+    for (var n = 0; n < 160; n++) {
+      if (dst < 0x8000) {
+        throw new Error("Invalid address for DMA transfer: " + dst);
+      }
+      this.writeByte(dst + n, this.readByte(src + n));
+    }
   }
 }

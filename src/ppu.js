@@ -1,11 +1,3 @@
-/* global CYCLES_PER_FRAME, IF_REG, IE_REG, IF_VBLANK */
-/* global STAT_REG, STAT_LYCLY_INT, STAT_OAM_INT, STAT_VBLANK_INT, STAT_HBLANK_INT */
-/* global STAT_LYCLY_FLAG, STAT_TRANSFER_FLAG, STAT_OAM_FLAG, STAT_VBLANK_FLAG, STAT_HBLANK_FLAG */
-/* global LCDC_REG, LCDC_ENABLE, LCDC_WINDOW_TILEMAP LCDC_WINDOW_ENABLE, LCDC_BGWINDOW_TILEDATA */
-/* global LCDC_BG_TILEMAP, LCDC_OBJ_SIZE, LCDC_OBJ_ENABLE, LCDC_BGWINDOW_ENABLE */
-/* global LY_REG, LYC_REG, BGP_REG, OBP0, OBP1 */
-/* global tcBin2Dec */
-
 /* 0x8000 0x8fff: Sprite tiles
  * 0x9800 0x9bff: BG tile map (0)
  * 0xfe00 0xfe9f: Sprit OAM table
@@ -25,22 +17,6 @@
  * bit 2-0: gameboy color only
  *
  */
-"use strict"
-
-const SCROLLY_REG = 0xff42;
-const SCROLLX_REG = 0xff43;
-
-const BG_NUM_TILES = 32;
-const TILE_SIZE = 8;
-const FRAMEBUF_WIDTH = 256;
-const FRAMEBUF_HEIGHT = 256;
-
-const DEFAULT_PALETTE = [
-  [155, 188, 15], // lightest
-  [139, 172, 10], // light
-  [48,  98,  48], // dark
-  [15,  56,  15], // darkest
-];
 
 class PPU {
   constructor(mmu) {
@@ -281,10 +257,10 @@ class PPU {
           tileY = (this.spriteHeight - 1) - tileY;
         }
         let colorId = this.getPixelColor(tile, tileX, tileY);
-        if (colorId == 0) { 
+        if (colorId == 0) {
           continue; // transparent pixel
         }
-        let rgb = this.getColorRGB(colorId, this.readByte(OBP0 + sprite.obp));
+        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? OBP1 : OBP0));
         this.drawPixel(x, y, rgb);
       }
     }

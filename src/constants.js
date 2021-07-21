@@ -1,5 +1,5 @@
-"use strict"
 
+// Emulator timing settings
 const CLOCK_SPEED = 4194304
 const FRAMES_PER_SECOND = 60;
 const CYCLES_PER_FRAME = CLOCK_SPEED / FRAMES_PER_SECOND;
@@ -59,6 +59,19 @@ const BGP_REG = 0xff47;
 const OBP0 = 0xff48;
 const OBP1 = 0xff49;
 
+// Misc PPU
+const SCROLLY_REG = 0xff42;
+const SCROLLX_REG = 0xff43;
+
+const BG_NUM_TILES = 32;
+const TILE_SIZE = 8;
+const FRAMEBUF_WIDTH = 256;
+const FRAMEBUF_HEIGHT = 256;
+
+// Screen
+const VIEWPORT_WIDTH = 160;
+const VIEWPORT_HEIGHT = 144;
+
 // Joypad
 const JOYP_REG = 0xff00;
 const JOYP_P15 = 0x20; // Bit for b, a, select, start buttons (0 = select)
@@ -66,4 +79,13 @@ const JOYP_P14 = 0x10; // Bit for up, down, left, right (0 = select)
 
 // Timers and dividers
 const DIV_REG = 0xff04;
+
+
+// Color palette for emulator
+const DEFAULT_PALETTE = [
+  [155, 188, 15], // lightest
+  [139, 172, 10], // light
+  [48,  98,  48], // dark
+  [15,  56,  15], // darkest
+];
 

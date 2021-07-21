@@ -1,3 +1,282 @@
+(() => {
+'use strict';
+
+
+// Emulator timing settings
+const CLOCK_SPEED = 4194304
+const FRAMES_PER_SECOND = 60;
+const CYCLES_PER_FRAME = CLOCK_SPEED / FRAMES_PER_SECOND;
+
+// DMA transfer register
+const OAM_DMA_REG = 0xff46;
+
+// Interrupts
+const IE_REG = 0xffff;
+const IF_REG = 0xff0f;
+
+// Interrupt flags
+const IF_VBLANK = 1;
+const IF_STAT = 2;
+const IF_TIMER = 4;
+const IF_SERIAL = 8;
+const IF_JOYPAD = 16;
+
+// Interrupt handlers
+const IH_VBLANK = 0x40;
+const IH_STAT = 0x48;
+const IH_TIMER = 0x50;
+const IH_SERIAL = 0x58;
+const IH_JOYPAD = 0x60;
+
+// LCD status register and flags
+const STAT_REG = 0xff41;
+const STAT_LYCLY_INT = 64;
+const STAT_OAM_INT = 32;
+const STAT_VBLANK_INT = 16;
+const STAT_HBLANK_INT = 8;
+const STAT_LYCLY_FLAG = 4;
+const STAT_TRANSFER_FLAG = 3;
+const STAT_OAM_FLAG = 2;
+const STAT_VBLANK_FLAG = 1;
+const STAT_HBLANK_FLAG = 0;
+
+// LCD control register and flags
+const LCDC_REG = 0xff40;
+const LCDC_ENABLE = 128;
+const LCDC_WINDOW_TILEMAP = 64;
+const LCDC_WINDOW_ENABLE = 32;
+const LCDC_BGWINDOW_TILEDATA = 16;
+const LCDC_BG_TILEMAP = 8;
+const LCDC_OBJ_SIZE = 4;
+const LCDC_OBJ_ENABLE = 2;
+const LCDC_BGWINDOW_ENABLE = 1;
+
+// LCD Y coords
+const LY_REG = 0xff44;
+const LYC_REG = 0xff45;
+
+// BG palette
+const BGP_REG = 0xff47;
+
+// OBJ palette data
+const OBP0 = 0xff48;
+const OBP1 = 0xff49;
+
+// Misc PPU
+const SCROLLY_REG = 0xff42;
+const SCROLLX_REG = 0xff43;
+
+const BG_NUM_TILES = 32;
+const TILE_SIZE = 8;
+const FRAMEBUF_WIDTH = 256;
+const FRAMEBUF_HEIGHT = 256;
+
+// Screen
+const VIEWPORT_WIDTH = 160;
+const VIEWPORT_HEIGHT = 144;
+
+// Joypad
+const JOYP_REG = 0xff00;
+const JOYP_P15 = 0x20; // Bit for b, a, select, start buttons (0 = select)
+const JOYP_P14 = 0x10; // Bit for up, down, left, right (0 = select)
+
+// Timers and dividers
+const DIV_REG = 0xff04;
+
+
+// Color palette for emulator
+const DEFAULT_PALETTE = [
+  [155, 188, 15], // lightest
+  [139, 172, 10], // light
+  [48,  98,  48], // dark
+  [15,  56,  15], // darkest
+];
+
+
+
+function hexify(h) {
+  if (h === undefined || h === null) return '(none)';
+  let s = h.toString(16);
+  if (s.length < 2) {
+    return '0x0' + h.toString(16);
+  }
+  return '0x' + s;
+}
+
+function uint16(hi, lo) {
+  return (hi << 8) + lo;
+}
+
+// Two's complement to decimal
+function tcBin2Dec(num, bits=8) {
+  let neg = (num & (1 << (bits - 1)));
+  if (neg) {
+    return num | ~((1 << bits) - 1);
+  }
+  return num;
+}
+
+function getText(charCodes) {
+  return charCodes.reduce((acc, cur) => acc + ((cur > 0) ? String.fromCharCode(cur) : ''), '');
+}
+
+const CONTROLS = {
+  "w": "up",
+  "s": "down",
+  "a": "left",
+  "d": "right",
+  "j": "b",
+  "k": "a",
+  "u": "select",
+  "i": "start",
+}
+
+class DMG {
+  constructor(cpu, ppu, mmu, screen, joypad, cons) {
+    this.cpu = cpu;
+    this.ppu = ppu;
+    this.mmu = mmu;
+    this.screen = screen;
+    this.joypad = joypad;
+    this.console = cons;
+    this.cycles_per_frame = CYCLES_PER_FRAME;
+    this.started = false;
+  }
+
+  reset() {
+    this.cycles = 0;
+    this.frames = 0;
+    this.cpu.reset();
+    this.ppu.reset();
+    this.mmu.reset();
+
+    // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
+
+    this.mmu.writeByte(0xff07, 0x00);
+    this.mmu.writeByte(0xff10, 0x80);
+    this.mmu.writeByte(0xff11, 0xbf);
+    this.mmu.writeByte(0xff12, 0xf3);
+    this.mmu.writeByte(0xff14, 0xbf);
+    this.mmu.writeByte(0xff16, 0x3f);
+    this.mmu.writeByte(0xff17, 0x00);
+    this.mmu.writeByte(0xff19, 0xbf);
+    this.mmu.writeByte(0xff1a, 0x7f);
+    this.mmu.writeByte(0xff1b, 0xff);
+    this.mmu.writeByte(0xff1c, 0x9f);
+    this.mmu.writeByte(0xff1e, 0xbf);
+    this.mmu.writeByte(0xff20, 0xff);
+    this.mmu.writeByte(0xff21, 0x00);
+    this.mmu.writeByte(0xff22, 0x00);
+    this.mmu.writeByte(0xff23, 0xbf);
+    this.mmu.writeByte(0xff24, 0x77);
+    this.mmu.writeByte(0xff25, 0xf3);
+    this.mmu.writeByte(0xff26, 0xf1);
+    this.mmu.writeByte(0xff40, 0x91);
+    this.mmu.writeByte(0xff42, 0x00);
+    this.mmu.writeByte(0xff43, 0x00);
+    this.mmu.writeByte(0xff45, 0x00);
+    this.mmu.writeByte(0xff47, 0xfc);
+    this.mmu.writeByte(0xff48, 0xff);
+    this.mmu.writeByte(0xff49, 0xff);
+    this.mmu.writeByte(0xff4a, 0x00);
+    this.mmu.writeByte(0xff4b, 0x00);
+    this.mmu.writeByte(0xffff, 0x00);
+
+    let AF = 0x01b0;
+    let BC = 0x0013;
+    let DE = 0x00d8;
+    let HL = 0x014d;
+
+    this.cpu.A = AF >> 8;
+    this.cpu.F = AF & 0xff;
+    this.cpu.B = BC >> 8;
+    this.cpu.C = BC & 0xff;
+    this.cpu.D = DE >> 8;
+    this.cpu.E = DE & 0xff;
+    this.cpu.H = HL >> 8;
+    this.cpu.L = HL & 0xff;
+    this.cpu.SP = 0xfffe;
+    this.cpu.PC = 0x100; // Skip checksum routines and begin at ROM address 0x100
+  }
+
+  loadRom(rom) {
+    this.reset();
+    this.mmu.loadRom(rom);
+  }
+
+  start() {
+    this.started = true;
+    // Start main emulation loop
+    this.update();
+  }
+
+  // Thank you http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
+  nextFrame() {
+    let total = 0;
+    while (total < this.cycles_per_frame) {
+      let cycles = this.cpu.update();
+      this.ppu.update(cycles);
+      total += cycles;
+    }
+    this.cycles += total;
+    this.screen.update();
+    requestAnimationFrame(() => this.nextFrame());
+    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
+  }
+
+  update() {
+    this.nextFrame();
+    this.frames++;
+  }
+
+  keyPressed(key, state) {
+    let button = CONTROLS[key.toLowerCase()];
+    if (button) {
+      this.joypad.buttonPressed(button, state);
+    }
+  }
+}
+
+
+// TODO: Clean up this code
+
+window.createDMG = () => {
+  let screenElem = document.getElementById('screen');
+  let consoleElem = document.getElementById('console');
+  let joypad = new Joypad();
+  let mmu = new MMU(joypad);
+  let ppu = new PPU(mmu);
+  let screen = new LCDScreen(screenElem, ppu);
+  let cpu = new CPU(mmu, ppu);
+  // let cons = new Console(consoleElem, 500, 200);
+  return new DMG(cpu, ppu, mmu, screen, joypad);
+}
+
+window.loadRomFromFile = (file) => {
+  let reader = new FileReader();
+  let dmg = window.dmg;
+  reader.readAsArrayBuffer(file);
+  reader.onload = function() {
+    dmg.loadRom(Array.from(new Uint8Array(reader.result)));
+    dmg.start();
+  }
+}
+window.setupInputHandlers = () => {
+  let dmg = window.dmg;
+  document.addEventListener('keydown', (e) => {
+    dmg.keyPressed(e.key, true);
+  });
+  document.addEventListener('keyup', (e) => {
+    dmg.keyPressed(e.key, false)
+  });
+};
+
+window.onload = () => {
+  window.dmg = window.createDMG();
+  window.setupInputHandlers();
+};
+
+
 class CPU {
   constructor(mmu, ppu) {
     this.mmu = mmu;
@@ -2016,3 +2295,645 @@ class CPU {
     return this.cycles;
   }
 }
+
+/* 0x8000 0x8fff: Sprite tiles
+ * 0x9800 0x9bff: BG tile map (0)
+ * 0xfe00 0xfe9f: Sprit OAM table
+ *
+ *
+ * VRAM Sprite Attributes Table:
+ *
+ * byte 0: y position
+ * byte 1: x position
+ * byte 2: tile index
+ * byte 3: attributes/flags:
+ * bit 7: bg and window over obj (0=no, 1=bg and window colors 1-3 over obj)
+ * bit 6: y flip
+ * bit 5: x flip
+ * bit 4: paletter number
+ * bit 3: gameboy color only
+ * bit 2-0: gameboy color only
+ *
+ */
+
+class PPU {
+  constructor(mmu) {
+    this.mmu = mmu;
+    this.tileData = new Uint8Array(16);
+    this.spriteData = new Uint8Array(16);
+    this.x = 0;
+    this.y = 0;
+    this.frameBuf = null;
+    this.cycles = 0;
+    this.LCDEnabled = false;
+    this.shouldUpdateScreen = false
+  }
+
+  reset() {
+    this.x = 0;
+    this.y = 0;
+    this.frameBuf = new ImageData(FRAMEBUF_WIDTH, FRAMEBUF_HEIGHT);
+    this.cycles = 0;
+    this.LCDEnabled = false;
+  }
+
+  readByte(loc) {
+    return this.mmu.readByte(loc);
+  }
+
+  writeByte(loc, value) {
+    return this.mmu.writeByte(loc, value);
+  }
+
+  setStatMode(flag) {
+    let stat = this.readByte(STAT_REG);
+    stat &= ~(STAT_VBLANK_FLAG | STAT_HBLANK_FLAG | STAT_OAM_FLAG | STAT_TRANSFER_FLAG);
+    stat |= flag;
+    this.writeByte(STAT_REG, stat);
+  }
+
+  cycleStatMode() {
+    let n = Math.floor(this.cycles / CYCLES_PER_FRAME) % 3;
+    switch (n) {
+      case 0:
+        this.setStatMode(STAT_OAM_FLAG);
+        break;
+      case 1:
+        this.setStatMode(STAT_TRANSFER_FLAG);
+        break;
+      case 2:
+        this.setStatMode(STAT_HBLANK_FLAG);
+        break
+    }
+  }
+
+  update(cycles) {
+    this.cycles += cycles;
+    this.LCDEnabled = this.readByte(LCDC_REG) & LCDC_ENABLE ? true : false;
+    this.spriteHeight = this.readByte(LCDC_REG) & LCDC_OBJ_SIZE ? 16 : 8;
+
+    if (! this.LCDEnabled) {
+      // Reset LY, stat mode and return early
+      this.writeByte(LY_REG, 0);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) & ~3);
+      return;
+    }
+
+    if (this.x >= FRAMEBUF_WIDTH) {
+      this.x = 0;
+      this.y++;
+    }
+
+    // Begin vblank at scanline 144
+    if (this.y == 144) {
+      this.writeByte(IF_REG, this.readByte(IF_REG) | IF_VBLANK);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) | STAT_VBLANK_FLAG);
+    }
+
+    // If not vblank: cycle LCD status modes
+    else if (this.y < 144) {
+      this.cycleStatMode();
+    }
+
+    // End of vblank
+    else if (this.y == 154) {
+      this.writeByte(IF_REG, this.readByte(IF_REG) & ~IF_VBLANK);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) & ~STAT_VBLANK_FLAG);
+      this.y = 0;
+
+      // Trigger screen redraw
+      this.shouldUpdateScreen = true;
+    }
+
+    let sprites = this.getSpritesForLine(this.y);
+
+    // Draw background pixels for n cycles
+    if (this.y < FRAMEBUF_HEIGHT) {
+      let end = this.x + cycles;
+      while (this.x < FRAMEBUF_WIDTH + 80) { // h-blank for 80 cycles - might be wrong.
+        this.drawBackground(this.x, this.y);
+        this.drawSprites(sprites, this.x, this.y);
+        this.x++;
+        if (this.x == end) {
+          break;
+        }
+      }
+    }
+    this.writeByte(LY_REG, this.y);
+
+    // Check if STAT interrupt LYC=LY should be triggered
+    let lyc = this.readByte(LYC_REG);
+    let lycEqual = this.readByte(STAT_REG) & STAT_LYCLY_FLAG ? lyc === this.y : lyc !== this.y;
+    if (lycEqual) {
+      this.writeByte(IF_REG, this.readByte(IF_REG) | IF_STAT);
+      this.writeByte(STAT_REG, this.readByte(STAT_REG) | STAT_LYCLY_INT);
+    }
+  }
+
+  getColorRGB(colorId, palette) {
+    return DEFAULT_PALETTE[(palette >> (2 * colorId)) & 0b11];
+  }
+
+  getTileAtCoords(x, y) {
+    // Finds the memory address of tile containing pixel at x, y
+    let yTiles = Math.floor(y / TILE_SIZE) * BG_NUM_TILES;
+    let xTiles = Math.floor(x / TILE_SIZE);
+
+    // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
+    let tileNum = (xTiles + yTiles) % (BG_NUM_TILES * BG_NUM_TILES);
+
+    // BG tilemap begins at 0x9800 or 9c000
+    let base = (this.readByte(LCDC_REG) & LCDC_BG_TILEMAP) ? 0x9c00 : 0x9800;
+    return this.readByte(base + tileNum);
+  }
+
+  getTileData(tileIndex) {
+    // Get tile data for tile id
+    // Each tile uses 16 bytes of memory
+
+    // When bg/win flag is NOT set:
+    //  tiles 0-127   -> address range 0x9000 - 0x97ff
+    //  tiles 128-255 -> address range 0x8800 - 0x8fff
+    let base;
+
+    if (this.readByte(LCDC_REG) & LCDC_BGWINDOW_TILEDATA) {
+      base = 0x8000 + (16 * tileIndex);
+    }
+    else {
+      base = 0x9000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
+    }
+    for (let offset = 0; offset < 16; offset++) {
+      this.tileData[offset] = this.readByte(base + offset);
+    }
+    return this.tileData;
+  }
+
+  drawBackground(x, y) {
+    // Draws a single pixel of the BG tilemap for x, y
+    let scrollX = this.readByte(SCROLLX_REG) % 255;
+    let scrollY = this.readByte(SCROLLY_REG) % 255;
+
+    let offsetX = scrollX % TILE_SIZE;
+    let offsetY = scrollY % TILE_SIZE;
+
+    let tileIndex = this.getTileAtCoords(x + scrollX, y + scrollY);
+    let tile = this.getTileData(tileIndex);
+    let tileX = (x + offsetX) % TILE_SIZE;
+    let tileY = (y + offsetY) % TILE_SIZE;
+
+    let colorId = this.getPixelColor(tile, tileX, tileY);
+    let rgb = this.getColorRGB(colorId, this.readByte(BGP_REG));
+    this.drawPixel(x, y, rgb);
+  }
+
+  getPixelColor(tile, tileX, tileY) {
+    // Draws a single pixel of a tile at screen location x, y
+
+    // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
+    //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
+    let left = tile[tileY * 2];
+    let right = tile[(tileY * 2) + 1];
+    let bit = 1 << 7 - tileX;
+    let hi = right & bit ? 1 : 0;
+    let lo = left & bit ? 1 : 0;
+    return (hi << 1) + lo;
+  }
+
+  getSpriteOAM(address) {
+    let flags = this.readByte(address + 3);
+    return {
+      y: this.readByte(address),
+      x: this.readByte(address + 1),
+      tileIndex: this.readByte(address + 2),
+      bgPriority: flags & (1 << 7) ? 1 : 0,
+      flipY: flags & (1 << 6) ? 1 : 0,
+      flipX: flags & (1 << 5) ? 1 : 0,
+      obp: flags & (1 << 4) ? 1 : 0,
+      cgbVramBank: flags & (1 << 3) ? 1 : 0,
+      cgbPalette: flags & 0b11,
+    }
+  }
+
+  getSpriteData(spriteIndex) {
+    let base = 0x8000 + (16 * spriteIndex);
+    for (let offset = 0; offset < 16; offset++) {
+      this.spriteData[offset] = this.readByte(base + offset);
+    }
+    return this.spriteData;
+  }
+
+  getSpritesForLine(line) {
+    let address = 0xfe00;
+    let sprites = [];
+
+    for (let n = 0; n < 40; n++) {
+      let curAddress = address + n * 4;
+      let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
+      if (spriteY <= line && spriteY + this.spriteHeight > line) {
+        sprites.push(this.getSpriteOAM(curAddress));
+      }
+      // Max 10 sprites per line
+      if (sprites.length > 10) {
+        break;
+      }
+    }
+    return sprites;
+  }
+
+  drawSprites(sprites, x, y) {
+    for (let n = 0; n < sprites.length; n++) {
+      let sprite = sprites[n];
+      if (x >= sprite.x - 8 && x < sprite.x) {
+        let tile = this.getSpriteData(sprite.tileIndex);
+        let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
+        let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
+
+        if (sprite.flipX) {
+          tileX = 7 - tileX;
+        }
+        if (sprite.flipY) {
+          tileY = (this.spriteHeight - 1) - tileY;
+        }
+        let colorId = this.getPixelColor(tile, tileX, tileY);
+        if (colorId == 0) {
+          continue; // transparent pixel
+        }
+        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? OBP1 : OBP0));
+        this.drawPixel(x, y, rgb);
+      }
+    }
+  }
+
+  drawPixel(x, y, rgb) {
+    let data = this.frameBuf.data;
+    let offset = (y * FRAMEBUF_WIDTH + x) * 4;
+
+    data[offset] = rgb[0];
+    data[offset + 1] = rgb[1];
+    data[offset + 2] = rgb[2];
+    data[offset + 3] = 255; // alpha
+  }
+}
+
+/*
+ * Memory Map
+ * Taken from https://gbdev.io/pandocs
+ *
+ * 0x0000 0x3fff: 16 KiB ROM bank 00 From cartridge, usually a fixed bank
+ * 0x4000 0x7fff: 16 KiB ROM Bank 01~NN From cartridge, switchable bank via mapper (if any)
+ * 0x8000 0x9fff: 8 KiB Video RAM (VRAM) In CGB mode, switchable bank 0/1
+ * 0xa000 0xbfff: 8 KiB External RAM From cartridge, switchable bank if any
+ * 0xc000 0xcfff: 4 KiB Work RAM (WRAM)
+ * 0xd000 0xdfff: 4 KiB Work RAM (WRAM) In CGB mode, switchable bank 1~7
+ * 0xe000 0xfdff: Mirror of C000~DDFF (ECHO RAM) Nintendo says use of this area is prohibited.
+ * 0xfe00 0xfe9f: Sprite attribute table (OAM)
+ * 0xfea0 0xfeff: Not Usable Nintendo says use of this area is prohibited
+ * 0xff00 0xff7f: I/O Registers
+ * 0xff80 0xfffe: High RAM (HRAM)
+ * 0xffff 0xffff: Interrupts Enable Register (IE)
+ *
+ */
+
+class MMU {
+  constructor(joypad) {
+    this.rom1 = null;
+    this.rom2 = null;
+    this.ram = null;
+    this.hram = null;
+    this.vram = null;
+    this.xram = null;
+    this.wram = null;
+    this.oam = null;
+    this.io = null
+    this.ie = null;
+    this.joypad = joypad;
+    this.mbcType = null;
+    this.bankNum1 = null;
+    this.bankNum2 = null;
+    this.bankMode = null;
+    this.ramEnabled = false;
+  }
+
+  reset() {
+    this.ram = new Uint8Array(32 * 1024);
+    this.vram = new Uint8Array(8 * 1024);
+    this.xram = new Uint8Array(8 * 1024);
+    this.wram = new Uint8Array(8 * 1024);
+    this.hram = new Uint8Array(128);
+    this.oam = new Uint8Array(128);
+    this.io = new Uint8Array(128);
+    this.ie = 0;
+    this.mbcType = 0;
+    this.bankNum1 = 1;
+    this.bankNum2 = 1;
+    this.bankMode = 0;
+    this.ramEnabled = false;
+  }
+
+  loadRom(rom) {
+    let header = this.readHeader(rom);
+    this.mbcType = header.mbcType;
+    this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
+    this.rom2 = new Uint8Array(rom.slice(16 * 1024));
+  }
+
+  readHeader(rom) {
+    return {
+      title: getText(rom.slice(0x0134, 0x0144)),
+      mfr: getText(rom.slice(0x013f, 0x0143)),
+      cgb: rom[0x0143],
+      newLicense: rom.slice(0x0144, 0x0146),
+      sgb: rom[0x0146],
+      mbcType: rom[0x0147],
+      romSize: rom[0x0148],
+      ramSize: rom[0x0148],
+      dest: rom[0x014a],
+      license: rom[0x014b],
+      ver: rom[0x014c],
+      checksum1: rom[0x014d],
+      checksum2: rom.slice(0x014e, 0x0150),
+    }
+  }
+
+  readByte(loc) {
+    // Route to joypad
+    if (loc == JOYP_REG) {
+      return this.joypad.read();
+    }
+
+    // ROM 1
+    else if (loc >= 0x0000 && loc <= 0x3fff) {
+      return this.rom1[loc];
+    }
+
+    // ROM 2
+    else if (loc >= 0x4000 && loc <= 0x7fff) {
+      // Memory bank switching is a work in progress!
+      if (this.mbcType) {
+        return this.rom2[(loc - 0x4000) * this.bankNum1];
+      }
+      else {
+        return this.rom2[loc - 0x4000];
+      }
+    }
+
+    // Video RAM
+    else if (loc >= 0x8000 && loc <= 0x9fff) {
+      return this.vram[loc - 0x8000];
+    }
+
+    // Ext. RAM
+    else if (loc >= 0xa000 && loc <= 0xbfff) {
+      return this.xram[loc - 0xa000];
+    }
+
+    // IO registers
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
+      return this.io[loc - 0xff00];
+    }
+
+    // High RAM
+    else if (loc >= 0xff80 && loc <= 0xfffe) {
+      return this.hram[loc - 0xff80];
+    }
+
+    // IE register
+    else if (loc === 0xffff) {
+      return this.ie;
+    }
+
+    // Sprite OAM
+    else if (loc >= 0xfe00 && loc <= 0xfe9f) {
+      return this.oam[loc - 0xfe00];
+    }
+
+    // Work RAM
+    else if (loc >= 0xc000 && loc <= 0xdfff) {
+      return this.wram[loc - 0xc000];
+    }
+
+    else {
+      console.warn("Invalid memory address: " + loc);
+    }
+  }
+
+  writeByte(loc, value) {
+    // Note: Ordering of if/else blocks matters here
+
+    let cycles = 0;
+
+    // Selects joypad buttons to read from (dpad or action button)
+    if (loc == JOYP_REG) {
+      this.joypad.write(value);
+    }
+
+    // Reset DIV register
+    else if (loc == DIV_REG) {
+      this.io[DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
+    }
+
+    // DMA Transfer
+    else if (loc == OAM_DMA_REG) {
+      this.OAMDMATransfer(value);
+      cycles = 160; // DMA Transfer takes 160 cycles
+    }
+
+    // IO registers
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
+      this.io[loc - 0xff00] = value;
+    }
+
+    // Sprite OAM
+    else if (loc >= 0xfe00 && loc <= 0xfe9f) {
+      this.oam[loc - 0xfe00] = value;
+    }
+
+    // High RAM
+    else if (loc >= 0xff80 && loc <= 0xfffe) {
+      this.hram[loc - 0xff80] = value;
+    }
+
+    // IE register
+    else if (loc === 0xffff) {
+      this.ie = value;
+    }
+
+    // Video RAM
+    else if (loc >= 0x8000 && loc <= 0x9fff) {
+      this.vram[loc - 0x8000] = value;
+    }
+
+    // Ext. RAM
+    else if (loc >= 0xa000 && loc <= 0xbfff) {
+      this.xram[loc - 0xa000] = value;
+    }
+
+    // Work RAM
+    else if (loc >= 0xc000 && loc <= 0xdfff) {
+      this.wram[loc - 0xc000] = value;
+    }
+
+    // Memory bank switching is a work in progress!
+    else if (this.mbcType) {
+      // MBC1: 0000-1FFF - RAM Enable
+      if (loc >= 0x0000 && loc <= 0x1fff) {
+        this.ramEnabled = (value & 0xa) ? true : false;
+      }
+      // MBC1: 2000-3FFF - ROM Bank Number
+      else if (loc >= 0x2000 && loc <= 0x3fff) {
+        this.bankNum1 = (value & 0x1f) || 1; // bank 0 invalid - should set to 1 instead
+      }
+      // MBC1: 4000-5FFF - RAM Bank Number or Upper Bits of ROM Bank Number
+      else if (loc >= 0x4000 && 0x5ffff) {
+        this.bankNum2 = value & 0xb11;
+      }
+      // MBC1: 6000-7FFF - Banking Mode Select
+      else if (loc >= 0x6000 && loc <= 0x7fff) {
+        this.bankMode = value & 1;
+      }
+    }
+
+    else if (loc >= 0x0000 && loc <= 0x7fff) {
+      // read only
+    }
+
+    else {
+      //console.warn("Invalid memory address: " + loc);
+    }
+    return cycles;
+  }
+
+  OAMDMATransfer(value) {
+    let src = value << 8;
+    let dst = 0xfe00;
+    for (var n = 0; n < 160; n++) {
+      if (dst < 0x8000) {
+        throw new Error("Invalid address for DMA transfer: " + dst);
+      }
+      this.writeByte(dst + n, this.readByte(src + n));
+    }
+  }
+}
+
+
+class LCDScreen {
+  constructor(canvas, ppu) {
+    this.canvas = canvas;
+    this.ppu = ppu;
+    this.canvas.width = VIEWPORT_WIDTH;
+    this.canvas.height = VIEWPORT_HEIGHT;
+    this.ctx = canvas.getContext('2d');
+  }
+
+  update() {
+    if (this.ppu.shouldUpdateScreen) {
+      this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+      this.ppu.shouldUpdateScreen = false;
+    }
+  }
+}
+
+
+// Mapping for button -> type/value
+const JOYP_BUTTONS = {
+  "up"      : [0, 4],
+  "down"    : [0, 8],
+  "left"    : [0, 2],
+  "right"   : [0, 1],
+  "b"       : [1, 2],
+  "a"       : [1, 1],
+  "select"  : [1, 4],
+  "start"   : [1, 8],
+}
+
+// Joypad Controller
+class Joypad {
+  constructor() {
+    // store dpad and action button values in array
+    // 0xf = no buttons pressed
+    this.buttons = [0xf, 0xf];
+    this.select = 0; // Used to switch between dpad/action buttons
+  }
+
+  // Register a button event (0 = pressed)
+  buttonPressed(button, state) {
+    let [sel, bit] = JOYP_BUTTONS[button];
+    this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
+    console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
+  }
+
+  // Switch between reading directional/action buttons
+  // or reset both by writing JOYP_15 | JOYP_P14
+  write(value) {
+    if (value === (JOYP_P15 | JOYP_P14)) {
+      this.buttons = [0xf, 0xf];
+    }
+    else if (value === JOYP_P14) {
+      this.select = 1; // P14 high = action buttons selected
+    }
+    else if (value === JOYP_P15) {
+      this.select = 0; // P15 high = dpad selected
+    }
+    else {
+      console.error("Joypad write error: " + value);
+    }
+  }
+  // Get current button status for dpad or action buttons
+  read() {
+    return this.buttons[this.select];
+  }
+}
+
+
+class Console {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.canvas.width = 500;
+    this.canvas.height = 200;
+    this.ctx = canvas.getContext('2d');
+    this.ctx.font = '12px serif';
+    this.ctx.fontColor = 'black';
+    this.colWidth = 10;
+    this.lineHeight = 12;
+  }
+
+  cpuFlagsToText(cpu) {
+    return cpu.getFlag("Z") ? "Z" : "-" + cpu.getFlag("N") ? "N" : "-" + cpu.getFlag("H") ? "H" : "-" + cpu.getFlag("C") ? "C" : "-";
+  }
+
+  print(text, col, line) {
+    let x = (col * this.colWidth);
+    let y = (line * this.lineHeight) + this.lineHeight;
+    this.ctx.fillText(text, x, y);
+  }
+
+  clear() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  update(dmg) {
+    this.clear();
+    this.updateRegisters(dmg);
+    this.updateCode(dmg);
+  }
+
+  updateCode(dmg) {
+    this.print("opcode=" + hexify(dmg.cpu.code || ''), 0, 6);
+    this.print("cycles=" + dmg.cpu.totalCycles, 10, 6);
+  }
+
+  updateRegisters(dmg) {
+    this.print("A=" + dmg.cpu.A, 0, 1);
+    this.print("F=" + this.cpuFlagsToText(dmg.cpu), 10, 1)
+    this.print("B=" + dmg.cpu.B, 0, 2);
+    this.print("C=" + dmg.cpu.C, 10, 2);
+    this.print("D=" + dmg.cpu.D, 0, 3);
+    this.print("E=" + dmg.cpu.E, 10, 3);
+    this.print("H=" + dmg.cpu.H, 0, 4);
+    this.print("L=" + dmg.cpu.L, 10, 4);
+    this.print("SP=" + hexify(dmg.cpu.SP), 0, 5);
+    this.print("PC=" + hexify(dmg.cpu.PC), 10, 5);
+  }
+}
+
+})(window);

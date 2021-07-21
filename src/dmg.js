@@ -1,7 +1,3 @@
-/* global CPU, MMU, PPU, LCDScreen, Console, Joypad, CONTROLS */
-/* global CYCLES_PER_FRAME */
-"use strict"
-
 const CONTROLS = {
   "w": "up",
   "s": "down",
@@ -33,7 +29,7 @@ class DMG {
     this.mmu.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
-    
+
     this.mmu.writeByte(0xff07, 0x00);
     this.mmu.writeByte(0xff10, 0x80);
     this.mmu.writeByte(0xff11, 0xbf);
@@ -103,7 +99,7 @@ class DMG {
     this.cycles += total;
     this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
-    //requestAnimationFrame(() => this.console ? this.console.update(this) : {});
+    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
   }
 
   update() {
@@ -122,7 +118,7 @@ class DMG {
 
 // TODO: Clean up this code
 
-function createDMG() {
+window.createDMG = () => {
   let screenElem = document.getElementById('screen');
   let consoleElem = document.getElementById('console');
   let joypad = new Joypad();
@@ -130,29 +126,31 @@ function createDMG() {
   let ppu = new PPU(mmu);
   let screen = new LCDScreen(screenElem, ppu);
   let cpu = new CPU(mmu, ppu);
-  let cons = new Console(consoleElem);
-  return new DMG(cpu, ppu, mmu, screen, joypad, cons);
+  // let cons = new Console(consoleElem, 500, 200);
+  return new DMG(cpu, ppu, mmu, screen, joypad);
 }
 
-function loadRomFromFile(file) {
+window.loadRomFromFile = (file) => {
   let reader = new FileReader();
+  let dmg = window.dmg;
   reader.readAsArrayBuffer(file);
   reader.onload = function() {
-    window.dmg.loadRom(Array.from(new Uint8Array(reader.result)));
-    window.dmg.start();
+    dmg.loadRom(Array.from(new Uint8Array(reader.result)));
+    dmg.start();
   }
 }
-function setupInputHandlers() {
+window.setupInputHandlers = () => {
+  let dmg = window.dmg;
   document.addEventListener('keydown', (e) => {
-    window.dmg.keyPressed(e.key, true);
+    dmg.keyPressed(e.key, true);
   });
   document.addEventListener('keyup', (e) => {
-    window.dmg.keyPressed(e.key, false)
+    dmg.keyPressed(e.key, false)
   });
-}
+};
 
 window.onload = () => {
-  window.dmg = createDMG();
+  window.dmg = window.createDMG();
   window.setupInputHandlers();
-}
+};
 

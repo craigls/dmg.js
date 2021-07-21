@@ -1,4 +1,3 @@
-"use strict"
 
 function hexify(h) {
   if (h === undefined || h === null) return '(none)';

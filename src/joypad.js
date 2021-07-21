@@ -1,5 +1,3 @@
-/* global JOYP_REG, JOYP_P14, JOYP_P15 */
-"use strict";
 
 // Mapping for button -> type/value
 const JOYP_BUTTONS = {
