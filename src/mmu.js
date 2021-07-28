@@ -34,7 +34,7 @@ class MMU {
     this.bankNum1 = null;
     this.bankNum2 = null;
     this.bankMode = null;
-    this.ramEnabled = false;
+    this.xramEnabled = false;
   }
 
   reset() {
@@ -48,9 +48,9 @@ class MMU {
     this.ie = 0;
     this.mbcType = 0;
     this.bankNum1 = 1;
-    this.bankNum2 = 1;
+    this.bankNum2 = 0;
     this.bankMode = 0;
-    this.ramEnabled = false;
+    this.xramEnabled = false;
   }
 
   loadRom(rom) {
@@ -80,7 +80,7 @@ class MMU {
 
   readByte(loc) {
     // Route to joypad
-    if (loc == JOYP_REG) {
+    if (loc == Constants.JOYP_REG) {
       return this.joypad.read();
     }
 
@@ -107,7 +107,9 @@ class MMU {
 
     // Ext. RAM
     else if (loc >= 0xa000 && loc <= 0xbfff) {
-      return this.xram[loc - 0xa000];
+      if (this.xramEnabled) {
+        return this.xram[loc - 0xa000];
+      }
     }
 
     // IO registers
@@ -146,17 +148,17 @@ class MMU {
     let cycles = 0;
 
     // Selects joypad buttons to read from (dpad or action button)
-    if (loc == JOYP_REG) {
+    if (loc == Constants.JOYP_REG) {
       this.joypad.write(value);
     }
 
     // Reset DIV register
-    else if (loc == DIV_REG) {
-      this.io[DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
+    else if (loc == Constants.DIV_REG) {
+      this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
     }
 
     // DMA Transfer
-    else if (loc == OAM_DMA_REG) {
+    else if (loc == Constants.OAM_DMA_REG) {
       this.OAMDMATransfer(value);
       cycles = 160; // DMA Transfer takes 160 cycles
     }
@@ -188,7 +190,9 @@ class MMU {
 
     // Ext. RAM
     else if (loc >= 0xa000 && loc <= 0xbfff) {
-      this.xram[loc - 0xa000] = value;
+      if (this.xramEnabled) {
+        this.xram[loc - 0xa000] = value;
+      }
     }
 
     // Work RAM
@@ -200,14 +204,14 @@ class MMU {
     else if (this.mbcType) {
       // MBC1: 0000-1FFF - RAM Enable
       if (loc >= 0x0000 && loc <= 0x1fff) {
-        this.ramEnabled = (value & 0xa) ? true : false;
+        this.xramEnabled = (value & 0xa) ? true : false;
       }
       // MBC1: 2000-3FFF - ROM Bank Number
       else if (loc >= 0x2000 && loc <= 0x3fff) {
-        this.bankNum1 = (value & 0x1f) || 1; // bank 0 invalid - should set to 1 instead
+        this.bankNum1 = (value & 0x1f); // bank 0 invalid - should set to 1 instead
       }
       // MBC1: 4000-5FFF - RAM Bank Number or Upper Bits of ROM Bank Number
-      else if (loc >= 0x4000 && 0x5ffff) {
+      else if (loc >= 0x4000 && loc <= 0x5fff) {
         this.bankNum2 = value & 0xb11;
       }
       // MBC1: 6000-7FFF - Banking Mode Select

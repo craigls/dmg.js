@@ -5,8 +5,9 @@
   "private": true,
   "directories": {},
   "devDependencies": {
-    "concat": "^1.0.3",
     "eslint": "^7.29.0",
+    "babel-eslint": "^10.1.0",
+    "concat": "^1.0.3",
     "npm-watch": "^0.10.0"
   },
   "scripts": {

@@ -17,7 +17,7 @@ class DMG {
     this.screen = screen;
     this.joypad = joypad;
     this.console = cons;
-    this.cycles_per_frame = CYCLES_PER_FRAME;
+    this.cycles_per_frame = Constants.CYCLES_PER_FRAME;
     this.started = false;
   }
 

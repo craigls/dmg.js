@@ -1,16 +1,4 @@
 
-// Mapping for button -> type/value
-const JOYP_BUTTONS = {
-  "up"      : [0, 4],
-  "down"    : [0, 8],
-  "left"    : [0, 2],
-  "right"   : [0, 1],
-  "b"       : [1, 2],
-  "a"       : [1, 1],
-  "select"  : [1, 4],
-  "start"   : [1, 8],
-}
-
 // Joypad Controller
 class Joypad {
   constructor() {
@@ -22,7 +10,7 @@ class Joypad {
 
   // Register a button event (0 = pressed)
   buttonPressed(button, state) {
-    let [sel, bit] = JOYP_BUTTONS[button];
+    let [sel, bit] = Constants.JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
     console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
   }
@@ -30,13 +18,13 @@ class Joypad {
   // Switch between reading directional/action buttons
   // or reset both by writing JOYP_15 | JOYP_P14
   write(value) {
-    if (value === (JOYP_P15 | JOYP_P14)) {
+    if (value === (Constants.JOYP_P15 | Constants.JOYP_P14)) {
       this.buttons = [0xf, 0xf];
     }
-    else if (value === JOYP_P14) {
+    else if (value === Constants.JOYP_P14) {
       this.select = 1; // P14 high = action buttons selected
     }
-    else if (value === JOYP_P15) {
+    else if (value === Constants.JOYP_P15) {
       this.select = 0; // P15 high = dpad selected
     }
     else {

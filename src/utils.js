@@ -24,3 +24,8 @@ function tcBin2Dec(num, bits=8) {
 function getText(charCodes) {
   return charCodes.reduce((acc, cur) => acc + ((cur > 0) ? String.fromCharCode(cur) : ''), '');
 }
+
+window.hexify = hexify;
+window.tcBin2Dec = tcBin2Dec;
+window.uint16 = uint16;
+window.getText = getText;

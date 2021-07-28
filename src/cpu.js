@@ -1973,35 +1973,35 @@ class CPU {
     this.IMEEnabled = false;
 
     // Reset IF bit
-    this.writeByte(IF_REG, this.readByte(IF_REG) & ~flag)
+    this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~flag)
   }
 
   updateInterrupts() {
     if (! this.IMEEnabled) {
       return;
     }
-    let interrupts = this.readByte(IE_REG) & this.readByte(IF_REG) & 0x1f;
+    let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
 
-    if (interrupts & IF_VBLANK) {
-      this.handleInterrupt(IH_VBLANK, IF_VBLANK);
+    if (interrupts & Constants.IF_VBLANK) {
+      this.handleInterrupt(Constants.IH_VBLANK, Constants.IF_VBLANK);
     }
-    else if (interrupts & IF_STAT) {
-      this.handleInterrupt(IH_STAT, IF_STAT);
+    else if (interrupts & Constants.IF_STAT) {
+      this.handleInterrupt(Constants.IH_STAT, Constants.IF_STAT);
     }
-    else if (interrupts & IF_TIMER) {
-      this.handleInterrupt(IH_TIMER, IF_TIMER);
+    else if (interrupts & Constants.IF_TIMER) {
+      this.handleInterrupt(Constants.IH_TIMER, Constants.IF_TIMER);
     }
-    else if (interrupts & IF_SERIAL) {
-      this.handleInterrupt(IH_SERIAL, IF_SERIAL);
+    else if (interrupts & Constants.IF_SERIAL) {
+      this.handleInterrupt(Constants.IH_SERIAL, Constants.IF_SERIAL);
     }
-    else if (interrupts & IF_JOYPAD) {
-      this.handleInterrupt(IH_JOYPAD, IF_JOYPAD);
+    else if (interrupts & Constants.IF_JOYPAD) {
+      this.handleInterrupt(Constants.IH_JOYPAD, Constants.IF_JOYPAD);
     }
   }
 
   updateTimers() {
     // write to IO directly to avoid reset of div
-    this.mmu.io[DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
+    this.mmu.io[Constants.DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
   }
 
   // CPU update
