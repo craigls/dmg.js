@@ -188,16 +188,19 @@ class PPU {
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    let base;
+    let vram = this.mmu.vram;
+    let index;
 
     if (this.readByte(Constants.LCDC_REG) & Constants.LCDC_BGWINDOW_TILEDATA) {
-      base = 0x8000 + (16 * tileIndex);
+      // Use address 0x8000
+      index = 16 * tileIndex;
     }
     else {
-      base = 0x9000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
+      // Use address 0x9000
+      index  = 0x1000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
     }
     for (let offset = 0; offset < 16; offset++) {
-      this.tileData[offset] = this.readByte(base + offset);
+      this.tileData[offset] = vram[index + offset]; // Faster to access vram array directly
     }
     return this.tileData;
   }
@@ -249,9 +252,10 @@ class PPU {
   }
 
   getSpriteData(spriteIndex) {
-    let base = 0x8000 + (16 * spriteIndex);
+    let vram = this.mmu.vram;
+    let index = 16 * spriteIndex;
     for (let offset = 0; offset < 16; offset++) {
-      this.spriteData[offset] = this.readByte(base + offset);
+      this.spriteData[offset] = vram[index + offset];
     }
     return this.spriteData;
   }

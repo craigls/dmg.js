@@ -96,7 +96,7 @@ class Constants {
   static TIMA = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control
-  static TAC_ENABLE = 4; // Time enable
+  static TAC_ENABLE = 4; // Timer enable
 
   // Color palette for emulator
   static DEFAULT_PALETTE = [
