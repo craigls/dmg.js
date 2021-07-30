@@ -2021,7 +2021,7 @@ class CPU {
 
     // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
-    if (tac & 4) { // Check timer enabled
+    if (tac & 0b100) { // Check timer enabled
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
       let val = this.readByte(Constants.TIMA_REG) + this.cycles / freq;
 
