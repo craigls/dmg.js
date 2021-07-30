@@ -236,12 +236,13 @@ class PPU {
     return (hi << 1) + lo;
   }
 
-  getSpriteOAM(address) {
-    let flags = this.readByte(address + 3);
+  getSpriteOAM(index) {
+    let oam = this.mmu.oam;
+    let flags = oam[index + 3];
     return {
-      y: this.readByte(address),
-      x: this.readByte(address + 1),
-      tileIndex: this.readByte(address + 2),
+      y: oam[index],
+      x: oam[index + 1],
+      tileIndex: oam[index + 2],
       bgPriority: flags & (1 << 7) ? 1 : 0,
       flipY: flags & (1 << 6) ? 1 : 0,
       flipX: flags & (1 << 5) ? 1 : 0,
@@ -261,14 +262,13 @@ class PPU {
   }
 
   getSpritesForLine(line) {
-    let address = 0xfe00;
+    let oam = this.mmu.oam;
     let sprites = [];
 
-    for (let n = 0; n < 40; n++) {
-      let curAddress = address + n * 4;
-      let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
+    for (let i = 0; i < 40; i++) {
+      let spriteY = oam[i * 4] - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + this.spriteHeight > line) {
-        sprites.push(this.getSpriteOAM(curAddress));
+        sprites.push(this.getSpriteOAM(i * 4));
       }
       // Max 10 sprites per line
       if (sprites.length > 10) {
