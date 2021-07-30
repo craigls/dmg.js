@@ -18,6 +18,7 @@ class CPU {
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
+    this.haltMode = false;
 
     this.flags = {
       Z: 128, // zero
@@ -41,6 +42,7 @@ class CPU {
     this.cycles = 0;
     this.totalCycles = 0;
     this.IMEEnabled = false;
+    this.haltMode = false;
   }
 
   setFlag(f) {
@@ -774,13 +776,23 @@ class CPU {
     return result & 0xff;
   }
 
+  nextInstruction() {
+    // CPU is halted, don't do anything
+    if (this.haltMode) {
+      return;
+    }
+    this.execute(this.nextByte());
+  }
+
   // Execute instructions
   execute(code) {
-    let op = this.decode(code);
     let r1;
     let r2;
     let cbop;
     let addr;
+    let op = this.decode(code);
+
+    this.code = code;
     this.cbcode = null;
 
     // TODO: Eliminate giant switch statement
@@ -1369,6 +1381,7 @@ class CPU {
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
         this.cycles += 4;
+        this.haltMode = true;
         break;
 
       case 0x40: // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
@@ -1965,6 +1978,13 @@ class CPU {
   }
 
   handleInterrupt(handler, flag) {
+    // Resume from halted CPU state
+    this.haltMode = false;
+
+    // Interrupts disabled, exit early
+    if (! this.IMEEnabled) {
+      return;
+    }
     // Save current PC and set to interrupt handler
     this.pushStack(this.PC);
     this.PC = handler;
@@ -1977,9 +1997,6 @@ class CPU {
   }
 
   updateInterrupts() {
-    if (! this.IMEEnabled) {
-      return;
-    }
     let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
 
     if (interrupts & Constants.IF_VBLANK) {
@@ -2000,7 +2017,26 @@ class CPU {
   }
 
   updateTimers() {
-    // write to IO directly to avoid reset of div
+    // Hacked together and probably buggy..
+
+    // TIMA: increment timer and check for overflow
+    let tac = this.readByte(Constants.TAC_REG)
+    if (tac & 4) { // Check timer enabled
+      let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
+      let val = this.readByte(Constants.TIMA_REG) + this.cycles / freq;
+
+      // If overflow occurred: set TIMA to TMA value and trigger interrupt
+      if (val > 255) {
+        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG));
+        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
+      }
+      // Update TIMA w/new value
+      else {
+        this.writeByte(Constants.TIMA_REG, val);
+      }
+    }
+
+    // DIV: write to IO directly to avoid reset
     this.mmu.io[Constants.DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
   }
 
@@ -2008,8 +2044,7 @@ class CPU {
   update() {
     this.cycles = 0;
     this.prevcode = this.code;
-    this.code = this.nextByte();
-    this.execute(this.code);
+    this.nextInstruction();
     this.updateInterrupts();
     this.updateTimers();
     this.totalCycles += this.cycles;

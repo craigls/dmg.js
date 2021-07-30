@@ -96,10 +96,11 @@ class Constants {
 
   // Timers and dividers
   static DIV_REG = 0xff04;
-  static TIMA = 0xff05; // Timer counter
+  static TIMA_REG = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control
-  static TAC_ENABLE = 4; // Time enable
+  static TAC_ENABLE = 4; // Timer enable
+  static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
   // Color palette for emulator
   static DEFAULT_PALETTE = [
@@ -321,6 +322,7 @@ class CPU {
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
+    this.haltMode = false;
 
     this.flags = {
       Z: 128, // zero
@@ -344,6 +346,7 @@ class CPU {
     this.cycles = 0;
     this.totalCycles = 0;
     this.IMEEnabled = false;
+    this.haltMode = false;
   }
 
   setFlag(f) {
@@ -1077,13 +1080,23 @@ class CPU {
     return result & 0xff;
   }
 
+  nextInstruction() {
+    // CPU is halted, don't do anything
+    if (this.haltMode) {
+      return;
+    }
+    this.execute(this.nextByte());
+  }
+
   // Execute instructions
   execute(code) {
-    let op = this.decode(code);
     let r1;
     let r2;
     let cbop;
     let addr;
+    let op = this.decode(code);
+
+    this.code = code;
     this.cbcode = null;
 
     // TODO: Eliminate giant switch statement
@@ -1672,6 +1685,7 @@ class CPU {
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
         this.cycles += 4;
+        this.haltMode = true;
         break;
 
       case 0x40: // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
@@ -2268,6 +2282,13 @@ class CPU {
   }
 
   handleInterrupt(handler, flag) {
+    // Resume from halted CPU state
+    this.haltMode = false;
+
+    // Interrupts disabled, exit early
+    if (! this.IMEEnabled) {
+      return;
+    }
     // Save current PC and set to interrupt handler
     this.pushStack(this.PC);
     this.PC = handler;
@@ -2280,9 +2301,6 @@ class CPU {
   }
 
   updateInterrupts() {
-    if (! this.IMEEnabled) {
-      return;
-    }
     let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
 
     if (interrupts & Constants.IF_VBLANK) {
@@ -2303,7 +2321,26 @@ class CPU {
   }
 
   updateTimers() {
-    // write to IO directly to avoid reset of div
+    // Hacked together and probably buggy..
+
+    // TIMA: increment timer and check for overflow
+    let tac = this.readByte(Constants.TAC_REG)
+    if (tac & 4) { // Check timer enabled
+      let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
+      let val = this.readByte(Constants.TIMA_REG) + this.cycles / freq;
+
+      // If overflow occurred: set TIMA to TMA value and trigger interrupt
+      if (val > 255) {
+        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG));
+        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
+      }
+      // Update TIMA w/new value
+      else {
+        this.writeByte(Constants.TIMA_REG, val);
+      }
+    }
+
+    // DIV: write to IO directly to avoid reset
     this.mmu.io[Constants.DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
   }
 
@@ -2311,8 +2348,7 @@ class CPU {
   update() {
     this.cycles = 0;
     this.prevcode = this.code;
-    this.code = this.nextByte();
-    this.execute(this.code);
+    this.nextInstruction();
     this.updateInterrupts();
     this.updateTimers();
     this.totalCycles += this.cycles;
@@ -2510,16 +2546,19 @@ class PPU {
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    let base;
+    let vram = this.mmu.vram;
+    let index;
 
     if (this.readByte(Constants.LCDC_REG) & Constants.LCDC_BGWINDOW_TILEDATA) {
-      base = 0x8000 + (16 * tileIndex);
+      // Use address 0x8000
+      index = 16 * tileIndex;
     }
     else {
-      base = 0x9000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
+      // Use address 0x9000
+      index = 0x1000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
     }
     for (let offset = 0; offset < 16; offset++) {
-      this.tileData[offset] = this.readByte(base + offset);
+      this.tileData[offset] = vram[index + offset]; // Faster to access vram array directly
     }
     return this.tileData;
   }
@@ -2555,38 +2594,41 @@ class PPU {
     return (hi << 1) + lo;
   }
 
-  getSpriteOAM(address) {
-    let flags = this.readByte(address + 3);
+  getSpriteOAM(index) {
+    let oam = this.mmu.oam;
+    let offset = index * 4;
+    let flags = oam[offset + 3];
     return {
-      y: this.readByte(address),
-      x: this.readByte(address + 1),
-      tileIndex: this.readByte(address + 2),
+      y: oam[offset],
+      x: oam[offset + 1],
+      tileIndex: oam[offset + 2],
       bgPriority: flags & (1 << 7) ? 1 : 0,
       flipY: flags & (1 << 6) ? 1 : 0,
       flipX: flags & (1 << 5) ? 1 : 0,
       obp: flags & (1 << 4) ? 1 : 0,
       cgbVramBank: flags & (1 << 3) ? 1 : 0,
       cgbPalette: flags & 0b11,
+      oamAddress: offset,
     }
   }
 
   getSpriteData(spriteIndex) {
-    let base = 0x8000 + (16 * spriteIndex);
+    let vram = this.mmu.vram;
+    let index = 16 * spriteIndex;
     for (let offset = 0; offset < 16; offset++) {
-      this.spriteData[offset] = this.readByte(base + offset);
+      this.spriteData[offset] = vram[index + offset];
     }
     return this.spriteData;
   }
 
   getSpritesForLine(line) {
-    let address = 0xfe00;
+    let oam = this.mmu.oam;
     let sprites = [];
 
-    for (let n = 0; n < 40; n++) {
-      let curAddress = address + n * 4;
-      let spriteY = this.readByte(curAddress) - 16; // sprite.y is vertical position on screen + 16
+    for (let index = 0; index < 40; index++) {
+      let spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + this.spriteHeight > line) {
-        sprites.push(this.getSpriteOAM(curAddress));
+        sprites.push(this.getSpriteOAM(index));
       }
       // Max 10 sprites per line
       if (sprites.length > 10) {
@@ -2598,6 +2640,7 @@ class PPU {
 
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
+      //if (n != 0) continue;
       let sprite = sprites[n];
       if (x >= sprite.x - 8 && x < sprite.x) {
         let tile = this.getSpriteData(sprite.tileIndex);
@@ -2726,7 +2769,7 @@ class MMU {
     else if (loc >= 0x4000 && loc <= 0x7fff) {
       // Memory bank switching is a work in progress!
       if (this.mbcType) {
-        return this.rom2[(loc - 0x4000) * this.bankNum1];
+        return this.rom2[(loc - 0x4000) + (16384 * (this.bankNum1 - 1))];
       }
       else {
         return this.rom2[loc - 0x4000];
@@ -2777,7 +2820,6 @@ class MMU {
 
   writeByte(loc, value) {
     // Note: Ordering of if/else blocks matters here
-
     let cycles = 0;
 
     // Selects joypad buttons to read from (dpad or action button)
@@ -2907,7 +2949,7 @@ class Joypad {
   buttonPressed(button, state) {
     let [sel, bit] = Constants.JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
-    console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
+    //console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
   }
 
   // Switch between reading directional/action buttons

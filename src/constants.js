@@ -93,10 +93,11 @@ class Constants {
 
   // Timers and dividers
   static DIV_REG = 0xff04;
-  static TIMA = 0xff05; // Timer counter
+  static TIMA_REG = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control
   static TAC_ENABLE = 4; // Timer enable
+  static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
   // Color palette for emulator
   static DEFAULT_PALETTE = [

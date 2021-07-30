@@ -197,7 +197,7 @@ class PPU {
     }
     else {
       // Use address 0x9000
-      index  = 0x1000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
+      index = 0x1000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
     }
     for (let offset = 0; offset < 16; offset++) {
       this.tileData[offset] = vram[index + offset]; // Faster to access vram array directly
@@ -238,17 +238,19 @@ class PPU {
 
   getSpriteOAM(index) {
     let oam = this.mmu.oam;
-    let flags = oam[index + 3];
+    let offset = index * 4;
+    let flags = oam[offset + 3];
     return {
-      y: oam[index],
-      x: oam[index + 1],
-      tileIndex: oam[index + 2],
+      y: oam[offset],
+      x: oam[offset + 1],
+      tileIndex: oam[offset + 2],
       bgPriority: flags & (1 << 7) ? 1 : 0,
       flipY: flags & (1 << 6) ? 1 : 0,
       flipX: flags & (1 << 5) ? 1 : 0,
       obp: flags & (1 << 4) ? 1 : 0,
       cgbVramBank: flags & (1 << 3) ? 1 : 0,
       cgbPalette: flags & 0b11,
+      oamAddress: offset,
     }
   }
 
@@ -265,10 +267,10 @@ class PPU {
     let oam = this.mmu.oam;
     let sprites = [];
 
-    for (let i = 0; i < 40; i++) {
-      let spriteY = oam[i * 4] - 16; // sprite.y is vertical position on screen + 16
+    for (let index = 0; index < 40; index++) {
+      let spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + this.spriteHeight > line) {
-        sprites.push(this.getSpriteOAM(i * 4));
+        sprites.push(this.getSpriteOAM(index));
       }
       // Max 10 sprites per line
       if (sprites.length > 10) {
@@ -280,6 +282,7 @@ class PPU {
 
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
+      //if (n != 0) continue;
       let sprite = sprites[n];
       if (x >= sprite.x - 8 && x < sprite.x) {
         let tile = this.getSpriteData(sprite.tileIndex);

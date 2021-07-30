@@ -93,7 +93,7 @@ class MMU {
     else if (loc >= 0x4000 && loc <= 0x7fff) {
       // Memory bank switching is a work in progress!
       if (this.mbcType) {
-        return this.rom2[(loc - 0x4000) * this.bankNum1];
+        return this.rom2[(loc - 0x4000) + (16384 * (this.bankNum1 - 1))];
       }
       else {
         return this.rom2[loc - 0x4000];
@@ -144,7 +144,6 @@ class MMU {
 
   writeByte(loc, value) {
     // Note: Ordering of if/else blocks matters here
-
     let cycles = 0;
 
     // Selects joypad buttons to read from (dpad or action button)
