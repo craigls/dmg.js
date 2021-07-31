@@ -144,7 +144,7 @@ class PPU {
     // Draw background pixels for n cycles
     if (this.y < Constants.FRAMEBUF_HEIGHT) {
       let end = this.x + cycles;
-      while (this.x < Constants.FRAMEBUF_WIDTH + 80) { // h-blank for 80 cycles - might be wrong.
+      while (this.x < Constants.FRAMEBUF_WIDTH) {
         this.drawBackground(this.x, this.y);
         this.drawSprites(sprites, this.x, this.y);
         this.x++;
@@ -156,11 +156,12 @@ class PPU {
     this.writeByte(Constants.LY_REG, this.y);
 
     // Check if STAT interrupt LYC=LY should be triggered
-    let lyc = this.readByte(Constants.LYC_REG);
-    let lycEqual = this.readByte(Constants.STAT_REG) & Constants.STAT_LYCLY_FLAG ? lyc === this.y : lyc !== this.y;
-    if (lycEqual) {
+    if (this.readByte(Constants.LYC_REG) === this.y) {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_INT);
       this.evalStatInterrupt();
+    }
+    else {
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_INT);
     }
   }
 

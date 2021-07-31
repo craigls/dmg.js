@@ -1175,6 +1175,12 @@ class CPU {
         this.cycles += 8;
         break;
 
+      // 0xf2  LD A,(C)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0xf2:
+        this.writeByte(this.A, this.read("(C)"));
+        this.cycles += 8;
+        break;
+
       // 0xe9  JP (HL)  length: 1  cycles: 4  flags: ----  group: control/br
       case 0xe9:
         this.cycles += this.JP(this.HL());
@@ -1380,8 +1386,8 @@ class CPU {
 
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
-        this.cycles += 4;
         this.haltMode = true;
+        this.cycles += 4;
         break;
 
       case 0x40: // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
@@ -1518,18 +1524,18 @@ class CPU {
       case 0x9d: // 0x9d  SBC A,L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x9f: // 0x9f  SBC A,A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.SBC(this.A, this[r1]);
+        this.A = this.SBC(this[r1]);
         this.cycles += 4;
         break;
 
       case 0x9e: // 0x9e  SBC A,(HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
-        this.A = this.SBC(this.A, this.readByte(this.HL()));
+        this.A = this.SBC(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
       // 0xde  SBC A,d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
       case 0xde:
-        this.a = this.SBC(this.A, this.read("d8"));
+        this.a = this.SBC(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -1978,13 +1984,6 @@ class CPU {
   }
 
   handleInterrupt(handler, flag) {
-    // Resume from halted CPU state
-    this.haltMode = false;
-
-    // Interrupts disabled, exit early
-    if (! this.IMEEnabled) {
-      return;
-    }
     // Save current PC and set to interrupt handler
     this.pushStack(this.PC);
     this.PC = handler;
@@ -1998,6 +1997,15 @@ class CPU {
 
   updateInterrupts() {
     let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
+
+    if (interrupts) {
+      // Resume from halted CPU state
+      this.haltMode = false;
+    }
+    // Interrupts disabled, exit early
+    if (! this.IMEEnabled) {
+      return;
+    }
 
     if (interrupts & Constants.IF_VBLANK) {
       this.handleInterrupt(Constants.IH_VBLANK, Constants.IF_VBLANK);
@@ -2045,8 +2053,8 @@ class CPU {
     this.cycles = 0;
     this.prevcode = this.code;
     this.nextInstruction();
-    this.updateInterrupts();
     this.updateTimers();
+    this.updateInterrupts();
     this.totalCycles += this.cycles;
     return this.cycles;
   }
