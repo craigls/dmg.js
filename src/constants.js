@@ -10,15 +10,15 @@ class Constants {
   static OAM_DMA_REG = 0xff46;
 
   // Interrupts
-  static IE_REG = 0xffff;
-  static IF_REG = 0xff0f;
+  static IE_REG = 0xffff; // interrupt enable
+  static IF_REG = 0xff0f; // interrupt flags
 
   // Interrupt flags
-  static IF_VBLANK = 1;
-  static IF_STAT = 2;
-  static IF_TIMER = 4;
-  static IF_SERIAL = 8;
-  static IF_JOYPAD = 16;
+  static IF_VBLANK  = (1 << 0);
+  static IF_STAT    = (1 << 1);
+  static IF_TIMER   = (1 << 2);
+  static IF_SERIAL  = (1 << 3);
+  static IF_JOYPAD  = (1 << 4);
 
   // Interrupt handlers
   static IH_VBLANK = 0x40;
@@ -27,17 +27,17 @@ class Constants {
   static IH_SERIAL = 0x58;
   static IH_JOYPAD = 0x60;
 
-  // LCD status register and flags
+  // LCD status register interrupt sources/flags
   static STAT_REG = 0xff41;
-  static STAT_LYCLY_INT = 64;
-  static STAT_OAM_INT = 32;
-  static STAT_VBLANK_INT = 16;
-  static STAT_HBLANK_INT = 8;
-  static STAT_LYCLY_FLAG = 4;
-  static STAT_TRANSFER_FLAG = 3;
-  static STAT_OAM_FLAG = 2;
-  static STAT_VBLANK_FLAG = 1;
-  static STAT_HBLANK_FLAG = 0;
+  static STAT_LYCLY_ON = 64;
+  static STAT_OAM_ON = 32;
+  static STAT_VBLANK_ON = 16;
+  static STAT_HBLANK_ON = 8;
+  static STAT_LYCLY_EQUAL = 4;
+  static STAT_TRANSFER_MODE = 3;
+  static STAT_OAM_MODE = 2;
+  static STAT_VBLANK_MODE = 1;
+  static STAT_HBLANK_MODE = 0;
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;

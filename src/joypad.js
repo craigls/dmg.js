@@ -19,7 +19,8 @@ class Joypad {
   // or reset both by writing JOYP_15 | JOYP_P14
   write(value) {
     if (value === (Constants.JOYP_P15 | Constants.JOYP_P14)) {
-      this.buttons = [0xf, 0xf];
+      // TODO: It's not clear to me how the joypad reset should work
+      //this.buttons = [0xf, 0xf];
     }
     else if (value === Constants.JOYP_P14) {
       this.select = 1; // P14 high = action buttons selected

@@ -109,8 +109,17 @@ class DMG {
 
   keyPressed(key, state) {
     let button = CONTROLS[key.toLowerCase()];
-    if (button) {
-      this.joypad.buttonPressed(button, state);
+    if (button === undefined) {
+      return
+    }
+    this.joypad.buttonPressed(button, state);
+
+    // Request joypad interrupt on button press (state = true)
+    if (state) {
+      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) | Constants.IF_JOYPAD);
+    }
+    else {
+      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) & ~Constants.IF_JOYPAD);
     }
   }
 }

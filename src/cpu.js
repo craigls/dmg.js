@@ -19,6 +19,7 @@ class CPU {
     this.cycles = 0;
     this.IMEEnabled = false;
     this.haltMode = false;
+    this.timer = 0;
 
     this.flags = {
       Z: 128, // zero
@@ -2025,23 +2026,22 @@ class CPU {
   }
 
   updateTimers() {
-    // Hacked together and probably buggy..
-
     // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
     if (tac & 0b100) { // Check timer enabled
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-      let val = this.readByte(Constants.TIMA_REG) + this.cycles / freq;
+      this.timer += this.cycles / freq;
 
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
-      if (val > 255) {
-        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG));
+      if (this.timer > 255) {
+        this.timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
       }
-      // Update TIMA w/new value
       else {
-        this.writeByte(Constants.TIMA_REG, val);
+        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
       }
+      // Update TIMA w/new value
+      this.writeByte(Constants.TIMA_REG, this.timer & 0xff);
     }
 
     // DIV: write to IO directly to avoid reset

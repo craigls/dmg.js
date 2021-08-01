@@ -13,15 +13,15 @@ class Constants {
   static OAM_DMA_REG = 0xff46;
 
   // Interrupts
-  static IE_REG = 0xffff;
-  static IF_REG = 0xff0f;
+  static IE_REG = 0xffff; // interrupt enable
+  static IF_REG = 0xff0f; // interrupt flags
 
   // Interrupt flags
-  static IF_VBLANK = 1;
-  static IF_STAT = 2;
-  static IF_TIMER = 4;
-  static IF_SERIAL = 8;
-  static IF_JOYPAD = 16;
+  static IF_VBLANK  = (1 << 0);
+  static IF_STAT    = (1 << 1);
+  static IF_TIMER   = (1 << 2);
+  static IF_SERIAL  = (1 << 3);
+  static IF_JOYPAD  = (1 << 4);
 
   // Interrupt handlers
   static IH_VBLANK = 0x40;
@@ -30,17 +30,17 @@ class Constants {
   static IH_SERIAL = 0x58;
   static IH_JOYPAD = 0x60;
 
-  // LCD status register and flags
+  // LCD status register interrupt sources/flags
   static STAT_REG = 0xff41;
-  static STAT_LYCLY_INT = 64;
-  static STAT_OAM_INT = 32;
-  static STAT_VBLANK_INT = 16;
-  static STAT_HBLANK_INT = 8;
-  static STAT_LYCLY_FLAG = 4;
-  static STAT_TRANSFER_FLAG = 3;
-  static STAT_OAM_FLAG = 2;
-  static STAT_VBLANK_FLAG = 1;
-  static STAT_HBLANK_FLAG = 0;
+  static STAT_LYCLY_ON = 64;
+  static STAT_OAM_ON = 32;
+  static STAT_VBLANK_ON = 16;
+  static STAT_HBLANK_ON = 8;
+  static STAT_LYCLY_EQUAL = 4;
+  static STAT_TRANSFER_MODE = 3;
+  static STAT_OAM_MODE = 2;
+  static STAT_VBLANK_MODE = 1;
+  static STAT_HBLANK_MODE = 0;
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;
@@ -256,8 +256,17 @@ class DMG {
 
   keyPressed(key, state) {
     let button = CONTROLS[key.toLowerCase()];
-    if (button) {
-      this.joypad.buttonPressed(button, state);
+    if (button === undefined) {
+      return
+    }
+    this.joypad.buttonPressed(button, state);
+
+    // Request joypad interrupt on button press (state = true)
+    if (state) {
+      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) | Constants.IF_JOYPAD);
+    }
+    else {
+      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) & ~Constants.IF_JOYPAD);
     }
   }
 }
@@ -323,6 +332,7 @@ class CPU {
     this.cycles = 0;
     this.IMEEnabled = false;
     this.haltMode = false;
+    this.timer = 0;
 
     this.flags = {
       Z: 128, // zero
@@ -1479,6 +1489,12 @@ class CPU {
         this.cycles += 8;
         break;
 
+      // 0xf2  LD A,(C)  length: 1  cycles: 8  flags: ----  group: x8/lsm
+      case 0xf2:
+        this.writeByte(this.A, this.read("(C)"));
+        this.cycles += 8;
+        break;
+
       // 0xe9  JP (HL)  length: 1  cycles: 4  flags: ----  group: control/br
       case 0xe9:
         this.cycles += this.JP(this.HL());
@@ -1684,8 +1700,8 @@ class CPU {
 
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
-        this.cycles += 4;
         this.haltMode = true;
+        this.cycles += 4;
         break;
 
       case 0x40: // 0x40  LD B,B  length: 1  cycles: 4  flags: ----  group: x8/lsm
@@ -1822,18 +1838,18 @@ class CPU {
       case 0x9d: // 0x9d  SBC A,L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x9f: // 0x9f  SBC A,A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.SBC(this.A, this[r1]);
+        this.A = this.SBC(this[r1]);
         this.cycles += 4;
         break;
 
       case 0x9e: // 0x9e  SBC A,(HL)  length: 1  cycles: 8  flags: Z1HC  group: x8/alu
-        this.A = this.SBC(this.A, this.readByte(this.HL()));
+        this.A = this.SBC(this.readByte(this.HL()));
         this.cycles += 8;
         break;
 
       // 0xde  SBC A,d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
       case 0xde:
-        this.a = this.SBC(this.A, this.read("d8"));
+        this.a = this.SBC(this.read("d8"));
         this.cycles += 8;
         break;
 
@@ -2282,13 +2298,6 @@ class CPU {
   }
 
   handleInterrupt(handler, flag) {
-    // Resume from halted CPU state
-    this.haltMode = false;
-
-    // Interrupts disabled, exit early
-    if (! this.IMEEnabled) {
-      return;
-    }
     // Save current PC and set to interrupt handler
     this.pushStack(this.PC);
     this.PC = handler;
@@ -2302,6 +2311,15 @@ class CPU {
 
   updateInterrupts() {
     let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
+
+    if (interrupts) {
+      // Resume from halted CPU state
+      this.haltMode = false;
+    }
+    // Interrupts disabled, exit early
+    if (! this.IMEEnabled) {
+      return;
+    }
 
     if (interrupts & Constants.IF_VBLANK) {
       this.handleInterrupt(Constants.IH_VBLANK, Constants.IF_VBLANK);
@@ -2321,23 +2339,22 @@ class CPU {
   }
 
   updateTimers() {
-    // Hacked together and probably buggy..
-
     // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
-    if (tac & 4) { // Check timer enabled
+    if (tac & 0b100) { // Check timer enabled
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-      let val = this.readByte(Constants.TIMA_REG) + this.cycles / freq;
+      this.timer += this.cycles / freq;
 
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
-      if (val > 255) {
-        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG));
+      if (this.timer > 255) {
+        this.timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
       }
-      // Update TIMA w/new value
       else {
-        this.writeByte(Constants.TIMA_REG, val);
+        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
       }
+      // Update TIMA w/new value
+      this.writeByte(Constants.TIMA_REG, this.timer & 0xff);
     }
 
     // DIV: write to IO directly to avoid reset
@@ -2349,8 +2366,8 @@ class CPU {
     this.cycles = 0;
     this.prevcode = this.code;
     this.nextInstruction();
-    this.updateInterrupts();
     this.updateTimers();
+    this.updateInterrupts();
     this.totalCycles += this.cycles;
     return this.cycles;
   }
@@ -2387,7 +2404,7 @@ class PPU {
     this.cycles = 0;
     this.LCDEnabled = false;
     this.shouldUpdateScreen = false
-    this.statInterrupt = false;
+    this.statInterruptHigh = false;
   }
 
   reset() {
@@ -2409,10 +2426,10 @@ class PPU {
   setStatMode(flag) {
     let stat = this.readByte(Constants.STAT_REG);
     stat &= ~(
-        Constants.STAT_VBLANK_FLAG
-      | Constants.STAT_HBLANK_FLAG
-      | Constants.STAT_OAM_FLAG
-      | Constants.STAT_TRANSFER_FLAG
+        Constants.STAT_VBLANK_MODE
+      | Constants.STAT_HBLANK_MODE
+      | Constants.STAT_OAM_MODE
+      | Constants.STAT_TRANSFER_MODE
     );
     stat |= flag;
     this.writeByte(Constants.STAT_REG, stat);
@@ -2424,23 +2441,23 @@ class PPU {
     let stat = this.readByte(Constants.STAT_REG);
     let interrupt;
 
-    interrupt = stat | Constants.STAT_LYCLY_INT;
-    interrupt ||= stat | Constants.STAT_OAM_INT;
-    interrupt ||= stat | Constants.STAT_VBLANK_INT;
-    interrupt ||= stat | Constants.STAT_HBLANK_INT;
+    interrupt = stat | Constants.STAT_LYCLY_ON;
+    interrupt ||= stat | Constants.STAT_OAM_ON;
+    interrupt ||= stat | Constants.STAT_VBLANK_ON;
+    interrupt ||= stat | Constants.STAT_HBLANK_ON;
 
     if (interrupt) {
       // Interrupt line transitioning from low to high.
-      if (! this.statInterrupt) {
+      if (! this.statInterruptHigh) {
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-        this.statInterrupt = true;
+        this.statInterruptHigh = true;
       }
       // If the interrupt line is already high
     }
     // set interrupt line low
-    else {
+    else if (this.statInterruptHigh) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
-      this.statInterrupt = false;
+      this.statInterruptHigh = false;
     }
   }
 
@@ -2448,13 +2465,13 @@ class PPU {
     let n = Math.floor(this.cycles / Constants.CYCLES_PER_FRAME) % 3;
     switch (n) {
       case 0:
-        this.setStatMode(Constants.STAT_OAM_FLAG);
+        this.setStatMode(Constants.STAT_OAM_MODE);
         break;
       case 1:
-        this.setStatMode(Constants.STAT_TRANSFER_FLAG);
+        this.setStatMode(Constants.STAT_TRANSFER_MODE);
         break;
       case 2:
-        this.setStatMode(Constants.STAT_HBLANK_FLAG);
+        this.setStatMode(Constants.STAT_HBLANK_MODE);
         break
     }
   }
@@ -2467,7 +2484,7 @@ class PPU {
     if (! this.LCDEnabled) {
       // Reset LY, stat mode and return early
       this.writeByte(Constants.LY_REG, 0);
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~3);
+      this.setStatMode(0);
       return;
     }
 
@@ -2502,7 +2519,7 @@ class PPU {
     // Draw background pixels for n cycles
     if (this.y < Constants.FRAMEBUF_HEIGHT) {
       let end = this.x + cycles;
-      while (this.x < Constants.FRAMEBUF_WIDTH + 80) { // h-blank for 80 cycles - might be wrong.
+      while (this.x < Constants.FRAMEBUF_WIDTH) {
         this.drawBackground(this.x, this.y);
         this.drawSprites(sprites, this.x, this.y);
         this.x++;
@@ -2514,11 +2531,12 @@ class PPU {
     this.writeByte(Constants.LY_REG, this.y);
 
     // Check if STAT interrupt LYC=LY should be triggered
-    let lyc = this.readByte(Constants.LYC_REG);
-    let lycEqual = this.readByte(Constants.STAT_REG) & Constants.STAT_LYCLY_FLAG ? lyc === this.y : lyc !== this.y;
-    if (lycEqual) {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_INT);
+    if (this.readByte(Constants.LYC_REG) === this.y) {
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
       this.evalStatInterrupt();
+    }
+    else {
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
     }
   }
 
@@ -2640,7 +2658,6 @@ class PPU {
 
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
-      //if (n != 0) continue;
       let sprite = sprites[n];
       if (x >= sprite.x - 8 && x < sprite.x) {
         let tile = this.getSpriteData(sprite.tileIndex);
@@ -2956,7 +2973,8 @@ class Joypad {
   // or reset both by writing JOYP_15 | JOYP_P14
   write(value) {
     if (value === (Constants.JOYP_P15 | Constants.JOYP_P14)) {
-      this.buttons = [0xf, 0xf];
+      // TODO: It's not clear to me how the joypad reset should work
+      //this.buttons = [0xf, 0xf];
     }
     else if (value === Constants.JOYP_P14) {
       this.select = 1; // P14 high = action buttons selected

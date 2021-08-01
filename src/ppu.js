@@ -29,7 +29,7 @@ class PPU {
     this.cycles = 0;
     this.LCDEnabled = false;
     this.shouldUpdateScreen = false
-    this.statInterrupt = false;
+    this.statInterruptHigh = false;
   }
 
   reset() {
@@ -51,10 +51,10 @@ class PPU {
   setStatMode(flag) {
     let stat = this.readByte(Constants.STAT_REG);
     stat &= ~(
-        Constants.STAT_VBLANK_FLAG
-      | Constants.STAT_HBLANK_FLAG
-      | Constants.STAT_OAM_FLAG
-      | Constants.STAT_TRANSFER_FLAG
+        Constants.STAT_VBLANK_MODE
+      | Constants.STAT_HBLANK_MODE
+      | Constants.STAT_OAM_MODE
+      | Constants.STAT_TRANSFER_MODE
     );
     stat |= flag;
     this.writeByte(Constants.STAT_REG, stat);
@@ -66,23 +66,23 @@ class PPU {
     let stat = this.readByte(Constants.STAT_REG);
     let interrupt;
 
-    interrupt = stat | Constants.STAT_LYCLY_INT;
-    interrupt ||= stat | Constants.STAT_OAM_INT;
-    interrupt ||= stat | Constants.STAT_VBLANK_INT;
-    interrupt ||= stat | Constants.STAT_HBLANK_INT;
+    interrupt = stat | Constants.STAT_LYCLY_ON;
+    interrupt ||= stat | Constants.STAT_OAM_ON;
+    interrupt ||= stat | Constants.STAT_VBLANK_ON;
+    interrupt ||= stat | Constants.STAT_HBLANK_ON;
 
     if (interrupt) {
       // Interrupt line transitioning from low to high.
-      if (! this.statInterrupt) {
+      if (! this.statInterruptHigh) {
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-        this.statInterrupt = true;
+        this.statInterruptHigh = true;
       }
       // If the interrupt line is already high
     }
     // set interrupt line low
-    else {
+    else if (this.statInterruptHigh) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
-      this.statInterrupt = false;
+      this.statInterruptHigh = false;
     }
   }
 
@@ -90,13 +90,13 @@ class PPU {
     let n = Math.floor(this.cycles / Constants.CYCLES_PER_FRAME) % 3;
     switch (n) {
       case 0:
-        this.setStatMode(Constants.STAT_OAM_FLAG);
+        this.setStatMode(Constants.STAT_OAM_MODE);
         break;
       case 1:
-        this.setStatMode(Constants.STAT_TRANSFER_FLAG);
+        this.setStatMode(Constants.STAT_TRANSFER_MODE);
         break;
       case 2:
-        this.setStatMode(Constants.STAT_HBLANK_FLAG);
+        this.setStatMode(Constants.STAT_HBLANK_MODE);
         break
     }
   }
@@ -109,7 +109,7 @@ class PPU {
     if (! this.LCDEnabled) {
       // Reset LY, stat mode and return early
       this.writeByte(Constants.LY_REG, 0);
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~3);
+      this.setStatMode(0);
       return;
     }
 
@@ -157,11 +157,11 @@ class PPU {
 
     // Check if STAT interrupt LYC=LY should be triggered
     if (this.readByte(Constants.LYC_REG) === this.y) {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_INT);
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
       this.evalStatInterrupt();
     }
     else {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_INT);
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
     }
   }
 
@@ -283,7 +283,6 @@ class PPU {
 
   drawSprites(sprites, x, y) {
     for (let n = 0; n < sprites.length; n++) {
-      //if (n != 0) continue;
       let sprite = sprites[n];
       if (x >= sprite.x - 8 && x < sprite.x) {
         let tile = this.getSpriteData(sprite.tileIndex);
