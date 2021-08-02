@@ -29,7 +29,6 @@ class PPU {
     this.cycles = 0;
     this.LCDEnabled = false;
     this.shouldUpdateScreen = false
-    this.statInterruptHigh = false;
   }
 
   reset() {
@@ -56,9 +55,7 @@ class PPU {
       | Constants.STAT_OAM_MODE
       | Constants.STAT_TRANSFER_MODE
     );
-    stat |= flag;
-    this.writeByte(Constants.STAT_REG, stat);
-    this.evalStatInterrupt();
+    this.writeByte(Constants.STAT_REG, stat | flag);
   }
 
   evalStatInterrupt() {
@@ -66,23 +63,19 @@ class PPU {
     let stat = this.readByte(Constants.STAT_REG);
     let interrupt;
 
-    interrupt = stat | Constants.STAT_LYCLY_ON;
-    interrupt ||= stat | Constants.STAT_OAM_ON;
-    interrupt ||= stat | Constants.STAT_VBLANK_ON;
-    interrupt ||= stat | Constants.STAT_HBLANK_ON;
+    interrupt = stat & Constants.STAT_LYCLY_EQUAL; // Constants.STAT_LYCLY_ON;
+    interrupt ||= stat & (Constants.STAT_OAM_MODE | Constants.STAT_OAM_ON);
+    interrupt ||= stat & (Constants.STAT_VBLANK_MODE | Constants.STAT_VBLANK_ON);
+    interrupt ||= stat & (Constants.STATS_HBLANK_MODE | Constants.STAT_HBLANK_ON);
 
     if (interrupt) {
       // Interrupt line transitioning from low to high.
-      if (! this.statInterruptHigh) {
-        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-        this.statInterruptHigh = true;
-      }
+      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
       // If the interrupt line is already high
     }
     // set interrupt line low
-    else if (this.statInterruptHigh) {
+    else {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
-      this.statInterruptHigh = false;
     }
   }
 
@@ -109,7 +102,6 @@ class PPU {
     if (! this.LCDEnabled) {
       // Reset LY, stat mode and return early
       this.writeByte(Constants.LY_REG, 0);
-      this.setStatMode(0);
       return;
     }
 
@@ -121,7 +113,7 @@ class PPU {
     // Begin vblank at scanline 144
     if (this.y == 144) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
-      this.setStatMode(Constants.IF_VBLANK);
+      this.setStatMode(Constants.STAT_VBLANK_MODE);
     }
 
     // If not vblank: cycle LCD status modes
@@ -132,7 +124,6 @@ class PPU {
     // End of vblank
     else if (this.y == 154) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
-      this.setStatMode(~Constants.IF_VBLANK);
       this.y = 0;
 
       // Trigger screen redraw
@@ -158,11 +149,11 @@ class PPU {
     // Check if STAT interrupt LYC=LY should be triggered
     if (this.readByte(Constants.LYC_REG) === this.y) {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
-      this.evalStatInterrupt();
     }
     else {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
     }
+    this.evalStatInterrupt();
   }
 
   getColorRGB(colorId, palette) {
