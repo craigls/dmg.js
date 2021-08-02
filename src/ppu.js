@@ -22,7 +22,7 @@ class PPU {
   constructor(mmu) {
     this.mmu = mmu;
     this.tileData = new Uint8Array(16);
-    this.spriteData = new Uint8Array(16);
+    this.spriteData = new Uint8Array(32);
     this.x = 0;
     this.y = 0;
     this.frameBuf = null;
@@ -63,15 +63,15 @@ class PPU {
     let stat = this.readByte(Constants.STAT_REG);
     let interrupt;
 
-    interrupt = stat & Constants.STAT_LYCLY_EQUAL; // Constants.STAT_LYCLY_ON;
-    interrupt ||= stat & (Constants.STAT_OAM_MODE | Constants.STAT_OAM_ON);
-    interrupt ||= stat & (Constants.STAT_VBLANK_MODE | Constants.STAT_VBLANK_ON);
-    interrupt ||= stat & (Constants.STATS_HBLANK_MODE | Constants.STAT_HBLANK_ON);
+    //let lycly = stat & (Constants.STAT_LYCLY_EQUAL | Constants.STAT_LYCLY_ON); // Doesn't work?
+    let lycly = stat & (Constants.STAT_LYCLY_EQUAL);
+    let oam = stat & (Constants.STAT_OAM_MODE | Constants.STAT_OAM_ON);
+    let vblank = stat & (Constants.STAT_VBLANK_MODE | Constants.STAT_VBLANK_ON);
+    let hblank = stat & (Constants.STATS_HBLANK_MODE | Constants.STAT_HBLANK_ON);
 
-    if (interrupt) {
+    if (lycly || oam || vblank || hblank) {
       // Interrupt line transitioning from low to high.
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-      // If the interrupt line is already high
     }
     // set interrupt line low
     else {
@@ -249,7 +249,8 @@ class PPU {
   getSpriteData(spriteIndex) {
     let vram = this.mmu.vram;
     let index = 16 * spriteIndex;
-    for (let offset = 0; offset < 16; offset++) {
+    let end = this.spriteHeight * 2;
+    for (let offset = 0; offset < end; offset++) {
       this.spriteData[offset] = vram[index + offset];
     }
     return this.spriteData;

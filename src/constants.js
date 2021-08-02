@@ -14,11 +14,11 @@ class Constants {
   static IF_REG = 0xff0f; // interrupt flags
 
   // Interrupt flags
-  static IF_VBLANK  = (1 << 0);
-  static IF_STAT    = (1 << 1);
-  static IF_TIMER   = (1 << 2);
-  static IF_SERIAL  = (1 << 3);
-  static IF_JOYPAD  = (1 << 4);
+  static IF_VBLANK  = 1 << 0;
+  static IF_STAT    = 1 << 1;
+  static IF_TIMER   = 1 << 2;
+  static IF_SERIAL  = 1 << 3;
+  static IF_JOYPAD  = 1 << 4;
 
   // Interrupt handlers
   static IH_VBLANK = 0x40;
@@ -29,11 +29,11 @@ class Constants {
 
   // LCD status register interrupt sources/flags
   static STAT_REG = 0xff41;
-  static STAT_LYCLY_ON = 64;
-  static STAT_OAM_ON = 32;
-  static STAT_VBLANK_ON = 16;
-  static STAT_HBLANK_ON = 8;
-  static STAT_LYCLY_EQUAL = 4;
+  static STAT_LYCLY_ON    = 1 << 6;
+  static STAT_OAM_ON      = 1 << 5;
+  static STAT_VBLANK_ON   = 1 << 4;
+  static STAT_HBLANK_ON   = 1 << 3;
+  static STAT_LYCLY_EQUAL = 1 << 2;
   static STAT_TRANSFER_MODE = 3;
   static STAT_OAM_MODE = 2;
   static STAT_VBLANK_MODE = 1;

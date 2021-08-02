@@ -138,7 +138,7 @@ class MMU {
     }
 
     else {
-      console.warn("Invalid memory address: " + loc);
+      // console.warn("Invalid memory address: " + loc);
     }
   }
 

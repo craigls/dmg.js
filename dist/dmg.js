@@ -17,11 +17,11 @@ class Constants {
   static IF_REG = 0xff0f; // interrupt flags
 
   // Interrupt flags
-  static IF_VBLANK  = (1 << 0);
-  static IF_STAT    = (1 << 1);
-  static IF_TIMER   = (1 << 2);
-  static IF_SERIAL  = (1 << 3);
-  static IF_JOYPAD  = (1 << 4);
+  static IF_VBLANK  = 1 << 0;
+  static IF_STAT    = 1 << 1;
+  static IF_TIMER   = 1 << 2;
+  static IF_SERIAL  = 1 << 3;
+  static IF_JOYPAD  = 1 << 4;
 
   // Interrupt handlers
   static IH_VBLANK = 0x40;
@@ -32,11 +32,11 @@ class Constants {
 
   // LCD status register interrupt sources/flags
   static STAT_REG = 0xff41;
-  static STAT_LYCLY_ON = 64;
-  static STAT_OAM_ON = 32;
-  static STAT_VBLANK_ON = 16;
-  static STAT_HBLANK_ON = 8;
-  static STAT_LYCLY_EQUAL = 4;
+  static STAT_LYCLY_ON    = 1 << 6;
+  static STAT_OAM_ON      = 1 << 5;
+  static STAT_VBLANK_ON   = 1 << 4;
+  static STAT_HBLANK_ON   = 1 << 3;
+  static STAT_LYCLY_EQUAL = 1 << 2;
   static STAT_TRANSFER_MODE = 3;
   static STAT_OAM_MODE = 2;
   static STAT_VBLANK_MODE = 1;
@@ -2397,7 +2397,7 @@ class PPU {
   constructor(mmu) {
     this.mmu = mmu;
     this.tileData = new Uint8Array(16);
-    this.spriteData = new Uint8Array(16);
+    this.spriteData = new Uint8Array(32);
     this.x = 0;
     this.y = 0;
     this.frameBuf = null;
@@ -2438,15 +2438,15 @@ class PPU {
     let stat = this.readByte(Constants.STAT_REG);
     let interrupt;
 
-    interrupt = stat & Constants.STAT_LYCLY_EQUAL; // Constants.STAT_LYCLY_ON;
-    interrupt ||= stat & (Constants.STAT_OAM_MODE | Constants.STAT_OAM_ON);
-    interrupt ||= stat & (Constants.STAT_VBLANK_MODE | Constants.STAT_VBLANK_ON);
-    interrupt ||= stat & (Constants.STATS_HBLANK_MODE | Constants.STAT_HBLANK_ON);
+    //let lycly = stat & (Constants.STAT_LYCLY_EQUAL | Constants.STAT_LYCLY_ON); // Doesn't work?
+    let lycly = stat & (Constants.STAT_LYCLY_EQUAL);
+    let oam = stat & (Constants.STAT_OAM_MODE | Constants.STAT_OAM_ON);
+    let vblank = stat & (Constants.STAT_VBLANK_MODE | Constants.STAT_VBLANK_ON);
+    let hblank = stat & (Constants.STATS_HBLANK_MODE | Constants.STAT_HBLANK_ON);
 
-    if (interrupt) {
+    if (lycly || oam || vblank || hblank) {
       // Interrupt line transitioning from low to high.
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-      // If the interrupt line is already high
     }
     // set interrupt line low
     else {
@@ -2624,7 +2624,8 @@ class PPU {
   getSpriteData(spriteIndex) {
     let vram = this.mmu.vram;
     let index = 16 * spriteIndex;
-    for (let offset = 0; offset < 16; offset++) {
+    let end = this.spriteHeight * 2;
+    for (let offset = 0; offset < end; offset++) {
       this.spriteData[offset] = vram[index + offset];
     }
     return this.spriteData;
@@ -2822,7 +2823,7 @@ class MMU {
     }
 
     else {
-      console.warn("Invalid memory address: " + loc);
+      // console.warn("Invalid memory address: " + loc);
     }
   }
 
