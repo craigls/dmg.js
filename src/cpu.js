@@ -690,7 +690,7 @@ class CPU {
     if (this.isHalfCarry(a1, b1 + carryLo)) {
       this.setFlag("H");
     }
-    return [(val >> 8) & 0xff, val & 0xff];
+    return [val >> 8, val & 0xff];
   }
 
   // Addition
@@ -813,12 +813,12 @@ class CPU {
         break;
 
       case 0x04: // 0x04  INC B  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
+      case 0x0c: // 0x0c  INC C  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x14: // 0x14  INC D  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x1c: // 0x1c  INC E  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x2c: // 0x2c  INC L  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x24: // 0x24  INC H  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x3c: // 0x3c  INC A  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-      case 0x0c: // 0x0c  INC C  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
         r1 = this.r[op.y];
         this[r1] = this.INC(this[r1]);
         this.cycles += 4;
