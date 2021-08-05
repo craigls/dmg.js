@@ -873,7 +873,6 @@ class CPU {
       // 0x1a  LD A,(DE)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x1a:
         this.A = this.readByte(uint16(this.D, this.E));
-        this.A = this.readByte(uint16(this.D, this.E));
         this.cycles += 8;
         break;
 
@@ -1387,7 +1386,8 @@ class CPU {
 
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
-        this.haltMode = true;
+        // TODO: Confirm corect behavior
+        this.haltMode = !this.IMEEnabled;
         this.cycles += 4;
         break;
 
