@@ -1003,7 +1003,7 @@ class CPU {
     if (this.isHalfCarry(a1, b1 + carryLo)) {
       this.setFlag("H");
     }
-    return [val >> 8, val & 0xff];
+    return [(val >> 8) & 0xff, val & 0xff];
   }
 
   // Addition
