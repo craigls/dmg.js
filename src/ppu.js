@@ -199,8 +199,8 @@ class PPU {
 
   drawBackground(x, y) {
     // Draws a single pixel of the BG tilemap for x, y
-    let scrollX = this.readByte(Constants.SCROLLX_REG) % 255;
-    let scrollY = this.readByte(Constants.SCROLLY_REG) % 255;
+    let scrollX = this.readByte(Constants.SCROLLX_REG);
+    let scrollY = this.readByte(Constants.SCROLLY_REG);
 
     let offsetX = scrollX % Constants.TILE_SIZE;
     let offsetY = scrollY % Constants.TILE_SIZE;
