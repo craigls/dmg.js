@@ -452,14 +452,14 @@ class CPU {
   incHL() {
     let val = this.HL();
     val++;
-    this.H = val >> 8;
+    this.H = (val >> 8) & 0xff;
     this.L = val & 0xff;
   }
 
   decHL() {
     let val = this.HL();
     val--;
-    this.H = val >> 8;
+    this.H = (val >> 8) & 0xff;
     this.L = val & 0xff;
   }
 
@@ -747,7 +747,7 @@ class CPU {
   // Rotate left, prev carry bit to bit 0
   RL(n) {
     let carry = this.getFlag("C");
-    let rot = (n << 1);
+    let rot = n << 1;
 
     // Previous carry is copied to bit zero
     if (carry) {
@@ -773,15 +773,33 @@ class CPU {
     return rot & 0xff;
   }
 
-  // Rotate A register left
+  // Rotate A left, through carry flag. Prev carry to bit 0, clear zero flag
   RLA() {
-    let rot = this.RL(this.A);
+    let bit0 = this.A & (1 << 0);
+    let carry = this.getFlag("C");
+    let rot = this.A << 1;
 
-    // Reset all excluding carry flag
+    // Reset all flags
     this.clearFlag("H");
     this.clearFlag("N");
     this.clearFlag("Z");
-    return rot;
+    this.clearFlag("C");
+
+    if (bit0) {
+      this.setFlag("C");
+    }
+    else {
+      this.clearFlag("C");
+    }
+
+    if (carry) {
+      rot |= 1;
+    }
+
+    else {
+      rot &= ~1;
+    }
+    return rot & 0xff;
   }
 
   // Rotate left: bit 7 to carry flag and bit 0
@@ -899,11 +917,27 @@ class CPU {
     return rot & 0xff;
   }
 
-  // Rotate A right: prev carry to bit 7, clear zero flag
+  // Rotate A right, through carry flag. Prev carry to bit 7, clear zero flag
   RRA() {
-    let rot = this.RR(this.A);
+    let carry = this.getFlag("C");
+    let bit0 = this.A & (1 << 0);
+    let rot = this.A >> 1;
+
     this.clearFlag("Z");
-    return rot;
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
+
+    if (carry) {
+      rot |= (1 << 7);
+    }
+    else {
+      rot &= ~(1 << 7);
+    }
+    if (bit0) {
+      this.setFlag("C");
+    }
+    return rot & 0xff;
   }
 
   // Rotate right: bit 0 to carry flag and bit 7
@@ -1185,7 +1219,6 @@ class CPU {
 
       // 0x1a  LD A,(DE)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x1a:
-        this.A = this.readByte(uint16(this.D, this.E));
         this.A = this.readByte(uint16(this.D, this.E));
         this.cycles += 8;
         break;
@@ -1700,7 +1733,8 @@ class CPU {
 
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
-        this.haltMode = true;
+        // TODO: Confirm correct behavior
+        this.haltMode = !this.IMEEnabled;
         this.cycles += 4;
         break;
 
