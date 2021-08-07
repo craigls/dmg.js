@@ -115,11 +115,12 @@ class DMG {
     this.joypad.buttonPressed(button, state);
 
     // Request joypad interrupt on button press (state = true)
+    let ifreg = this.mmu.readByte(Constants.IF_REG);
     if (state) {
-      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) | Constants.IF_JOYPAD);
+      this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
     }
     else {
-      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) & ~Constants.IF_JOYPAD);
+      this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
     }
   }
 }

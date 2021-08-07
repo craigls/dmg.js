@@ -44,14 +44,14 @@ class Constants {
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;
-  static LCDC_ENABLE = 128;
-  static LCDC_WINDOW_TILEMAP = 64;
-  static LCDC_WINDOW_ENABLE = 32;
-  static LCDC_BGWINDOW_TILEDATA = 16;
-  static LCDC_BG_TILEMAP = 8;
-  static LCDC_OBJ_SIZE = 4;
-  static LCDC_OBJ_ENABLE = 2;
-  static LCDC_BGWINDOW_ENABLE = 1;
+  static LCDC_ENABLE            = 1 << 7;
+  static LCDC_WINDOW_TILEMAP    = 1 << 6;
+  static LCDC_WINDOW_ENABLE     = 1 << 5;
+  static LCDC_BGWINDOW_TILEDATA = 1 << 4;
+  static LCDC_BG_TILEMAP        = 1 << 3;
+  static LCDC_OBJ_SIZE          = 1 << 2;
+  static LCDC_OBJ_ENABLE        = 1 << 1;
+  static LCDC_BGWINDOW_ENABLE   = 1 << 0;
 
   // LCD Y coords
   static LY_REG = 0xff44;
@@ -262,11 +262,12 @@ class DMG {
     this.joypad.buttonPressed(button, state);
 
     // Request joypad interrupt on button press (state = true)
+    let ifreg = this.mmu.readByte(Constants.IF_REG);
     if (state) {
-      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) | Constants.IF_JOYPAD);
+      this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
     }
     else {
-      this.mmu.writeByte(Constants.IF_REG, this.mmu.readByte(Constants.IF_REG) & ~Constants.IF_JOYPAD);
+      this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
     }
   }
 }
@@ -2608,8 +2609,8 @@ class PPU {
 
   drawBackground(x, y) {
     // Draws a single pixel of the BG tilemap for x, y
-    let scrollX = this.readByte(Constants.SCROLLX_REG) % 255;
-    let scrollY = this.readByte(Constants.SCROLLY_REG) % 255;
+    let scrollX = this.readByte(Constants.SCROLLX_REG);
+    let scrollY = this.readByte(Constants.SCROLLY_REG);
 
     let offsetX = scrollX % Constants.TILE_SIZE;
     let offsetY = scrollY % Constants.TILE_SIZE;
