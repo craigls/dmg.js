@@ -128,10 +128,10 @@ function uint16(hi, lo) {
 }
 
 // Two's complement to decimal
-function tcBin2Dec(num, bits=8) {
-  let neg = (num & (1 << (bits - 1)));
+function tcBin2Dec(num) {
+  let neg = num & (1 << 7);
   if (neg) {
-    return num | ~((1 << bits) - 1);
+    return num | ~((1 << 7) - 1);
   }
   return num;
 }
@@ -2465,7 +2465,7 @@ class PPU {
       | Constants.STAT_OAM_MODE
       | Constants.STAT_TRANSFER_MODE
     );
-    this.writeByte(Constants.STAT_REG, stat | flag || 0);
+    this.writeByte(Constants.STAT_REG, stat | flag);
   }
 
   evalStatInterrupt() {
@@ -2572,14 +2572,15 @@ class PPU {
 
   getTileAtCoords(x, y) {
     // Finds the memory address of tile containing pixel at x, y
-    let yTiles = Math.floor(y / Constants.TILE_SIZE) * Constants.BG_NUM_TILES;
-    let xTiles = Math.floor(x / Constants.TILE_SIZE);
+    let yTiles = Math.floor(y / Constants.TILE_SIZE) % Constants.BG_NUM_TILES;
+    let xTiles = Math.floor(x / Constants.TILE_SIZE) % Constants.BG_NUM_TILES;
 
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
-    let tileNum = (xTiles + yTiles) % (Constants.BG_NUM_TILES * Constants.BG_NUM_TILES);
+    let tileNum = xTiles + yTiles * Constants.BG_NUM_TILES;
 
     // BG tilemap begins at 0x9800 or 9c000
-    let base = (this.readByte(Constants.LCDC_REG) & Constants.LCDC_BG_TILEMAP) ? 0x9c00 : 0x9800;
+    let base = this.readByte(Constants.LCDC_REG) & Constants.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
+
     return this.readByte(base + tileNum);
   }
 
@@ -2612,27 +2613,24 @@ class PPU {
     let scrollX = this.readByte(Constants.SCROLLX_REG);
     let scrollY = this.readByte(Constants.SCROLLY_REG);
 
-    let offsetX = scrollX % Constants.TILE_SIZE;
-    let offsetY = scrollY % Constants.TILE_SIZE;
-
     let tileIndex = this.getTileAtCoords(x + scrollX, y + scrollY);
     let tile = this.getTileData(tileIndex);
-    let tileX = (x + offsetX) % Constants.TILE_SIZE;
-    let tileY = (y + offsetY) % Constants.TILE_SIZE;
+    let tileX = (x + scrollX) % Constants.TILE_SIZE;
+    let tileY = (y + scrollY) % Constants.TILE_SIZE;
 
     let colorId = this.getPixelColor(tile, tileX, tileY);
     let rgb = this.getColorRGB(colorId, this.readByte(Constants.BGP_REG));
     this.drawPixel(x, y, rgb);
   }
 
-  getPixelColor(tile, tileX, tileY) {
-    // Draws a single pixel of a tile at screen location x, y
+  getPixelColor(tile, x, y) {
+    // Get color id of tile data at pixel x,y
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
-    let left = tile[tileY * 2];
-    let right = tile[(tileY * 2) + 1];
-    let bit = 1 << 7 - tileX;
+    let left = tile[y * 2];
+    let right = tile[(y * 2) + 1];
+    let bit = 1 << 7 - x;
     let hi = right & bit ? 1 : 0;
     let lo = left & bit ? 1 : 0;
     return (hi << 1) + lo;

@@ -13,10 +13,10 @@ function uint16(hi, lo) {
 }
 
 // Two's complement to decimal
-function tcBin2Dec(num, bits=8) {
-  let neg = (num & (1 << (bits - 1)));
+function tcBin2Dec(num) {
+  let neg = num & (1 << 7);
   if (neg) {
-    return num | ~((1 << bits) - 1);
+    return num | ~((1 << 7) - 1);
   }
   return num;
 }
