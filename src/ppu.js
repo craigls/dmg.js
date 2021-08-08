@@ -47,15 +47,18 @@ class PPU {
     return this.mmu.writeByte(loc, value);
   }
 
-  setStatMode(flag) {
+  setStatMode(statMode) {
     let stat = this.readByte(Constants.STAT_REG);
+    if (statMode === (stat & 0xfc)) { // stat mode already set
+      return;
+    }
     stat &= ~(
         Constants.STAT_VBLANK_MODE
       | Constants.STAT_HBLANK_MODE
       | Constants.STAT_OAM_MODE
       | Constants.STAT_TRANSFER_MODE
     );
-    this.writeByte(Constants.STAT_REG, stat | flag);
+    this.writeByte(Constants.STAT_REG, stat | statMode);
   }
 
   evalStatInterrupt() {
@@ -76,16 +79,19 @@ class PPU {
   }
 
   cycleStatMode() {
-    let n = Math.floor(this.cycles / Constants.CYCLES_PER_FRAME) % 3;
+    // Pandocs: PPU should cycle between modes 2, 3, 0 every 456 cycles
+    // This code isn't accurate as the duration of mode 3 is dependent
+    // on the number of sprites to render. But it seems to work ok (for now)
+    let n = Math.floor(this.cycles / 456) % 3;
     switch (n) {
       case 0:
-        this.setStatMode(Constants.STAT_OAM_MODE);
+        this.setStatMode(Constants.STAT_OAM_MODE); // mode 2
         break;
       case 1:
-        this.setStatMode(Constants.STAT_TRANSFER_MODE);
+        this.setStatMode(Constants.STAT_TRANSFER_MODE); // mode 3
         break;
       case 2:
-        this.setStatMode(Constants.STAT_HBLANK_MODE);
+        this.setStatMode(Constants.STAT_HBLANK_MODE); // mode 0
         break
     }
   }
