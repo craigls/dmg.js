@@ -49,9 +49,6 @@ class PPU {
 
   setStatMode(statMode) {
     let stat = this.readByte(Constants.STAT_REG);
-    if (statMode === (stat & 0xfc)) { // stat mode already set
-      return;
-    }
     stat &= ~(
         Constants.STAT_VBLANK_MODE
       | Constants.STAT_HBLANK_MODE

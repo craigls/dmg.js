@@ -92,7 +92,7 @@ class Constants {
   }
 
   // Timers and dividers
-  static DIV_REG = 0xff04;
+  static DIV_REG = 0xff04; // Divider register
   static TIMA_REG = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control

@@ -95,7 +95,7 @@ class Constants {
   }
 
   // Timers and dividers
-  static DIV_REG = 0xff04;
+  static DIV_REG = 0xff04; // Divider register
   static TIMA_REG = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control
@@ -612,6 +612,40 @@ class CPU {
       return this.CALL(addr);
     }
     return cycles;
+  }
+
+  // Converts A register to BCD from previous add/sub op
+  // More info at https://gbdev.gg8.se/wiki/articles/DAA
+  DAA() {
+    // A to binary coded decimal
+    if (this.getFlag("N")) {
+      if (this.getFlag("C")) {
+        this.A -= 0x60;
+      }
+      if (this.getFlag("H")) {
+        this.A -= 0x06;
+      }
+    }
+    else {
+      if (this.getFlag("C") || (this.A & 0xff) > 0x99) {
+        this.A += 0x60;
+      }
+      if (this.getFlag("H") || (this.A & 0x0f) > 0x09) {
+        this.A += 0x06;
+      }
+    }
+    // Set flags
+    this.clearFlag("H");
+    this.clearFlag("Z");
+    this.clearFlag("C");
+
+    if ((this.A & 0xff) === 0) {
+      this.setFlag("Z");
+    }
+    if (! this.getFlag("N") && this.A > 0x99) {
+      this.setFlag("C");
+    }
+    return this.A & 0xff;
   }
 
   // Return
@@ -1941,6 +1975,7 @@ class CPU {
 
       // 0x27  DAA  length: 1  cycles: 4  flags: Z-0C  group: x8/alu
       case 0x27:
+        this.A = this.DAA();
         this.cycles += 4;
         break;
 
@@ -2459,9 +2494,6 @@ class PPU {
 
   setStatMode(statMode) {
     let stat = this.readByte(Constants.STAT_REG);
-    if (statMode === (stat & 0xfc)) { // stat mode already set
-      return;
-    }
     stat &= ~(
         Constants.STAT_VBLANK_MODE
       | Constants.STAT_HBLANK_MODE
@@ -3014,7 +3046,7 @@ class Joypad {
       this.select = 0; // P15 high = dpad selected
     }
     else {
-      console.error("Joypad write error: " + value);
+      //console.error("Joypad write error: " + value);
     }
   }
   // Get current button status for dpad or action buttons

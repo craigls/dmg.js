@@ -29,7 +29,7 @@ class Joypad {
       this.select = 0; // P15 high = dpad selected
     }
     else {
-      console.error("Joypad write error: " + value);
+      //console.error("Joypad write error: " + value);
     }
   }
   // Get current button status for dpad or action buttons

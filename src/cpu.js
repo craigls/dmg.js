@@ -300,6 +300,40 @@ class CPU {
     return cycles;
   }
 
+  // Converts A register to BCD from previous add/sub op
+  // More info at https://gbdev.gg8.se/wiki/articles/DAA
+  DAA() {
+    // A to binary coded decimal
+    if (this.getFlag("N")) {
+      if (this.getFlag("C")) {
+        this.A -= 0x60;
+      }
+      if (this.getFlag("H")) {
+        this.A -= 0x06;
+      }
+    }
+    else {
+      if (this.getFlag("C") || (this.A & 0xff) > 0x99) {
+        this.A += 0x60;
+      }
+      if (this.getFlag("H") || (this.A & 0x0f) > 0x09) {
+        this.A += 0x06;
+      }
+    }
+    // Set flags
+    this.clearFlag("H");
+    this.clearFlag("Z");
+    this.clearFlag("C");
+
+    if ((this.A & 0xff) === 0) {
+      this.setFlag("Z");
+    }
+    if (! this.getFlag("N") && this.A > 0x99) {
+      this.setFlag("C");
+    }
+    return this.A & 0xff;
+  }
+
   // Return
   RET() {
     let cycles = 16;
@@ -1627,6 +1661,7 @@ class CPU {
 
       // 0x27  DAA  length: 1  cycles: 4  flags: Z-0C  group: x8/alu
       case 0x27:
+        this.A = this.DAA();
         this.cycles += 4;
         break;
 
