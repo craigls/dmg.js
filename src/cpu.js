@@ -137,17 +137,11 @@ class CPU {
   }
 
   incHL() {
-    let val = this.HL();
-    val++;
-    this.H = (val >> 8) & 0xff;
-    this.L = val & 0xff;
+    [this.H, this.L] = this.INC16(this.H, this.L);
   }
 
   decHL() {
-    let val = this.HL();
-    val--;
-    this.H = (val >> 8) & 0xff;
-    this.L = val & 0xff;
+    [this.H, this.L] = this.DEC16(this.H, this.L);
   }
 
   // Push 2 bytes onto stack
