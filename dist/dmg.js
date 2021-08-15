@@ -496,27 +496,6 @@ class CPU {
     return cycles;
   }
 
-  // Jump if zero
-  JPZ(addr) {
-    let cycles = 12;
-    if (this.getFlag("Z")) {
-      this.PC = addr;
-      cycles += 4;
-    }
-    return cycles;
-  }
-
-  // Jump if not zero
-  JPNZ(addr) {
-    let cycles = 12;
-    if (! this.getFlag("Z")) {
-      this.PC = addr;
-      cycles += 4;
-    }
-    return cycles;
-  }
-
-
   // Jump relative if not zero
   JRNZ(offset) {
     let cycles = 8;
@@ -541,6 +520,26 @@ class CPU {
   JP(addr) {
     let cycles = 4;
     this.PC = addr;
+    return cycles;
+  }
+
+  // Jump if zero
+  JPZ(addr) {
+    let cycles = 12;
+    if (this.getFlag("Z")) {
+      this.PC = addr;
+      cycles += 4;
+    }
+    return cycles;
+  }
+
+  // Jump if not zero
+  JPNZ(addr) {
+    let cycles = 12;
+    if (! this.getFlag("Z")) {
+      this.PC = addr;
+      cycles += 4;
+    }
     return cycles;
   }
 
@@ -1052,23 +1051,6 @@ class CPU {
     return this.ADD(b + carry);
   }
 
-  ADD16(a1, a2, b1, b2) {
-    let carryLo = (a2 + b2 > 255) ? 1 : 0;
-    let val = uint16(a1, a2) + uint16(b1, b2);
-
-    this.clearFlag("N");
-    this.clearFlag("H");
-    this.clearFlag("C");
-
-    if (val > 65535) {
-      this.setFlag("C");
-    }
-    if (this.isHalfCarry(a1, b1 + carryLo)) {
-      this.setFlag("H");
-    }
-    return [(val >> 8) & 0xff, val & 0xff];
-  }
-
   // Addition
   ADD(b) {
     let val = this.A + b;
@@ -1089,6 +1071,25 @@ class CPU {
     }
     return val & 0xff;
   }
+
+  // Add register pairs
+  ADD16(a1, a2, b1, b2) {
+    let carryLo = (a2 + b2 > 255) ? 1 : 0;
+    let val = uint16(a1, a2) + uint16(b1, b2);
+
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
+
+    if (val > 65535) {
+      this.setFlag("C");
+    }
+    if (this.isHalfCarry(a1, b1 + carryLo)) {
+      this.setFlag("H");
+    }
+    return [(val >> 8) & 0xff, val & 0xff];
+  }
+
 
   // Subtraction
   SUB(b) {
@@ -2016,11 +2017,15 @@ class CPU {
           case 0x0b: // (cb) 0x0b  RRC E  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x0c: // (cb) 0x0c  RRC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x0d: // (cb) 0x0d  RRC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-          case 0x0e: // (cb) 0x0e  RRC (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x0f: // (cb) 0x0f  RRC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
             r1 = this.r[cbop.z];
             this[r1] = this.RRC(this[r1]);
             this.cycles += 8;
+            break;
+
+          case 0x0e: // (cb) 0x0e  RRC (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
+            this.writeByte(this.HL(), this.RRC(this.readByte(this.HL())));
+            this.cycles += 16;
             break;
 
           case 0x10: // (cb) 0x10  RL B  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
