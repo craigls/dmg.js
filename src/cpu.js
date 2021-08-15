@@ -1328,7 +1328,7 @@ class CPU {
       case 0xbd: // 0xbd  CP L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0xbf: // 0xbf  CP A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.CP(this[r1]);
+        this.CP(this[r1]);
         this.cycles += 4;
         break;
 
