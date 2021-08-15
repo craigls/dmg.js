@@ -1070,7 +1070,7 @@ class CPU {
 
       // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
       case 0xe8:
-        this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8"));
+        this.SP = uint16(this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8")));
         this.cycles += 16;
         break;
 
@@ -1424,7 +1424,7 @@ class CPU {
 
       // 0x39  ADD HL,SP  length: 1  cycles: 8  flags: -0HC  group: x16/alu
       case 0x39:
-        this.SP = uint16(this.ADD16(this.H, this.L, this.SP >> 8, this.SP & 0xff));
+        [this.H, this.L] = this.ADD16(this.H, this.L, this.SP >> 8, this.SP & 0xff);
         this.cycles += 8;
         break;
 
