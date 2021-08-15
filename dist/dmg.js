@@ -451,17 +451,11 @@ class CPU {
   }
 
   incHL() {
-    let val = this.HL();
-    val++;
-    this.H = (val >> 8) & 0xff;
-    this.L = val & 0xff;
+    [this.H, this.L] = this.INC16(this.H, this.L);
   }
 
   decHL() {
-    let val = this.HL();
-    val--;
-    this.H = (val >> 8) & 0xff;
-    this.L = val & 0xff;
+    [this.H, this.L] = this.DEC16(this.H, this.L);
   }
 
   // Push 2 bytes onto stack
@@ -1642,7 +1636,7 @@ class CPU {
       case 0xbd: // 0xbd  CP L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0xbf: // 0xbf  CP A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
         r1 = this.r[op.z];
-        this.A = this.CP(this[r1]);
+        this.CP(this[r1]);
         this.cycles += 4;
         break;
 
