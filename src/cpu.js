@@ -776,7 +776,6 @@ class CPU {
     return [(val >> 8) & 0xff, val & 0xff];
   }
 
-
   // Subtraction
   SUB(b) {
     let val = this.A - b;
@@ -1071,6 +1070,7 @@ class CPU {
       // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
       case 0xe8:
         this.SP = uint16(this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8")));
+        this.clearFlag("Z");
         this.cycles += 16;
         break;
 
@@ -1103,6 +1103,7 @@ class CPU {
       // 0xf8  LD HL,SP+r8  length: 2  cycles: 12  flags: 00HC  group: x16/lsm
       case 0xf8:
         [this.H, this.L] = this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8"));
+        this.clearFlag("Z");
         this.cycles += 12;
         break;
 
