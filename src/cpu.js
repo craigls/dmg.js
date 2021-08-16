@@ -489,7 +489,7 @@ class CPU {
 
   // Rotate A left, through carry flag. Prev carry to bit 0, clear zero flag
   RLA() {
-    let bit0 = this.A & (1 << 0);
+    let bit7 = this.A & (1 << 7);
     let carry = this.getFlag("C");
     let rot = this.A << 1;
 
@@ -499,17 +499,12 @@ class CPU {
     this.clearFlag("Z");
     this.clearFlag("C");
 
-    if (bit0) {
+    if (bit7) {
       this.setFlag("C");
     }
-    else {
-      this.clearFlag("C");
-    }
-
     if (carry) {
       rot |= 1;
     }
-
     else {
       rot &= ~1;
     }
@@ -532,7 +527,7 @@ class CPU {
       rot |= 1;
     }
     else {
-      rot &= ~bit7;
+      rot &= ~1;
     }
     if ((rot & 0xff) === 0) {
       this.setFlag("Z");
@@ -608,6 +603,7 @@ class CPU {
   // Rotate right: prev carry to bit 7
   RR(n) {
     let carry = this.getFlag("C");
+    let bit0 = n & (1 << 0);
     let rot = (n >> 1);
 
     if (carry) {
@@ -622,7 +618,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (rot > 255) {
+    if (bit0) {
       this.setFlag("C");
     }
     if ((rot & 0xff) === 0) {
