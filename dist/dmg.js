@@ -1910,7 +1910,7 @@ class CPU {
 
       // 0xde  SBC A,d8  length: 2  cycles: 8  flags: Z1HC  group: x8/alu
       case 0xde:
-        this.a = this.SBC(this.read("d8"));
+        this.A = this.SBC(this.read("d8"));
         this.cycles += 8;
         break;
 
