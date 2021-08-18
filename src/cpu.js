@@ -535,6 +535,13 @@ class CPU {
     return rot & 0xff;
   }
 
+  // RLCA - RLC applied to A register but zero flag is cleared
+  RLCA() {
+    let val = this.RLC(this.A);
+    this.clearFlag("Z");
+    return val;
+  }
+
   // Shift right: bit 0 to carry, bit 7 reset to 0
   SRL(n) {
     let val = (n >> 1) & ~(1 << 7);
@@ -763,7 +770,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (val > 65535) {
+    if (val > 255) {
       this.setFlag("C");
     }
     if (this.isHalfCarry(a1, b1 + carryLo)) {
@@ -833,6 +840,20 @@ class CPU {
       this.setFlag("Z");
     }
     return result & 0xff;
+  }
+
+  // Clear carry flag
+  CCF() {
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.clearFlag("C");
+  }
+
+  // Set carry flag
+  SCF() {
+    this.clearFlag("N");
+    this.clearFlag("H");
+    this.setFlag("C");
   }
 
   nextInstruction() {
@@ -1010,7 +1031,7 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x07  LD B,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
+      // 0x06  LD B,d8  length: 2  cycles: 8  flags: ----  group: x8/lsm
       case 0x06:
         this.B = this.read("d8");
         this.cycles += 8;
@@ -1026,7 +1047,7 @@ class CPU {
 
       // 0x07  RLCA  length: 1  cycles: 4  flags: 000C  group: x8/rsb
       case 0x07:
-        this.A = this.RLC(this.A);
+        this.A = this.RLCA();
         this.cycles += 4;
         break;
 
@@ -1266,7 +1287,7 @@ class CPU {
 
       // 0x37  SCF  length: 1  cycles: 4  flags: -001  group: x8/alu
       case 0x37:
-        this.setFlag("C");
+        this.SCF();
         this.cycles += 4;
         break;
 
@@ -1440,7 +1461,7 @@ class CPU {
 
       // 0x3f  CCF  length: 1  cycles: 4  flags: -00C  group: x8/alu
       case 0x3f:
-        this.clearFlag("C");
+        this.CCF();
         this.cycles += 4;
         break;
 
@@ -1963,7 +1984,6 @@ class CPU {
             this.writeByte(this.HL(), this.RES(cbop.y, this.readByte(this.HL())));
             this.cycles += 16;
             break;
-
 
           case 0xc0: // (cb) 0xc0  SET 0,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xc1: // (cb) 0xc1  SET 0,C  length: 2  cycles: 8  flags: ----  group: x8/rsb

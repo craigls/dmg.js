@@ -9,9 +9,6 @@ class LCDScreen {
   }
 
   update() {
-    if (this.ppu.shouldUpdateScreen) {
-      this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT)
-      this.ppu.shouldUpdateScreen = false;
-    }
+    this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT)
   }
 }

@@ -28,7 +28,6 @@ class PPU {
     this.frameBuf = null;
     this.cycles = 0;
     this.LCDEnabled = false;
-    this.shouldUpdateScreen = false
   }
 
   reset() {
@@ -128,9 +127,6 @@ class PPU {
     else if (this.y == 154) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
       this.y = 0;
-
-      // Trigger screen redraw
-      this.shouldUpdateScreen = true;
     }
 
     let sprites = this.getSpritesForLine(this.y);
