@@ -10,7 +10,7 @@ var sourceFiles = [
   'src/mmu.js',
   'src/screen.js',
   'src/joypad.js',
-  'src/console.js',
+  //'src/vramviewer.js',
   'src/footer.js',
 ]
 

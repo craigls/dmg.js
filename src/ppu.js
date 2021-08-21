@@ -96,14 +96,13 @@ class PPU {
     this.cycles += cycles;
     this.spriteHeight = this.readByte(Constants.LCDC_REG) & Constants.LCDC_OBJ_SIZE ? 16 : 8;
 
+    this.LCDEnabled = this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE ? true : false;
     // LCD Disabled
-    if (! this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE) {
+    if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
-      this.LCDEnabled = false;
       // TODO: clear screen
       return;
     }
-    this.LCDEnabled = true;
 
     if (this.x >= Constants.FRAMEBUF_WIDTH) {
       this.x = 0;
@@ -114,13 +113,11 @@ class PPU {
     if (this.y == 144) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
       this.setStatMode(Constants.STAT_VBLANK_MODE);
-      this.evalStatInterrupt();
     }
 
     // If not vblank: cycle LCD status modes
     else if (this.y < 144) {
       this.cycleStatMode();
-      this.evalStatInterrupt();
     }
 
     // End of vblank
@@ -148,11 +145,11 @@ class PPU {
     // Check if STAT interrupt LYC=LY should be triggered
     if (this.readByte(Constants.LYC_REG) == this.y) {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
-      this.evalStatInterrupt();
     }
     else {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
     }
+    this.evalStatInterrupt();
   }
 
   getColorRGB(colorId, palette) {

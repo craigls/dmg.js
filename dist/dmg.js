@@ -37,10 +37,10 @@ class Constants {
   static STAT_VBLANK_ON   = 1 << 4;
   static STAT_HBLANK_ON   = 1 << 3;
   static STAT_LYCLY_EQUAL = 1 << 2;
-  static STAT_TRANSFER_MODE = 3;
-  static STAT_OAM_MODE = 2;
-  static STAT_VBLANK_MODE = 1;
-  static STAT_HBLANK_MODE = 0;
+  static STAT_HBLANK_MODE = 0;    // mode 0
+  static STAT_VBLANK_MODE = 1;    // mode 1
+  static STAT_OAM_MODE = 2;       // mode 2
+  static STAT_TRANSFER_MODE = 3;  // mode 3
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;
@@ -157,14 +157,14 @@ const CONTROLS = {
 }
 
 class DMG {
-  constructor(cpu, ppu, mmu, screen, joypad, cons) {
+  constructor(cpu, ppu, mmu, screen, joypad, vramviewer) {
     this.cpu = cpu;
     this.ppu = ppu;
     this.mmu = mmu;
+    this.vramviewer = vramviewer;
     this.screen = screen;
     this.joypad = joypad;
-    this.console = cons;
-    this.cycles_per_frame = Constants.CYCLES_PER_FRAME;
+    this.cyclesPerFrame = Constants.CYCLES_PER_FRAME;
     this.started = false;
   }
 
@@ -238,7 +238,7 @@ class DMG {
   // Thank you http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
   nextFrame() {
     let total = 0;
-    while (total < this.cycles_per_frame) {
+    while (total < this.cyclesPerFrame) {
       let cycles = this.cpu.update();
       this.ppu.update(cycles);
       total += cycles;
@@ -246,7 +246,7 @@ class DMG {
     this.cycles += total;
     this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
-    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
+    requestAnimationFrame(() => this.vramviewer ? this.vramviewer.update() : null);
   }
 
   update() {
@@ -278,12 +278,13 @@ class DMG {
 window.createDMG = () => {
   let screenElem = document.getElementById('screen');
   let consoleElem = document.getElementById('console');
+  let vvElem = document.getElementById('vramviewer');
   let joypad = new Joypad();
   let mmu = new MMU(joypad);
   let ppu = new PPU(mmu);
   let screen = new LCDScreen(screenElem, ppu);
   let cpu = new CPU(mmu, ppu);
-  // let cons = new Console(consoleElem, 500, 200);
+  //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, mmu, screen, joypad);
 }
 
@@ -2557,14 +2558,13 @@ class PPU {
     this.cycles += cycles;
     this.spriteHeight = this.readByte(Constants.LCDC_REG) & Constants.LCDC_OBJ_SIZE ? 16 : 8;
 
+    this.LCDEnabled = this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE ? true : false;
     // LCD Disabled
-    if (! this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE) {
+    if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
-      this.LCDEnabled = false;
       // TODO: clear screen
       return;
     }
-    this.LCDEnabled = true;
 
     if (this.x >= Constants.FRAMEBUF_WIDTH) {
       this.x = 0;
@@ -2575,13 +2575,11 @@ class PPU {
     if (this.y == 144) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
       this.setStatMode(Constants.STAT_VBLANK_MODE);
-      this.evalStatInterrupt();
     }
 
     // If not vblank: cycle LCD status modes
     else if (this.y < 144) {
       this.cycleStatMode();
-      this.evalStatInterrupt();
     }
 
     // End of vblank
@@ -2609,11 +2607,11 @@ class PPU {
     // Check if STAT interrupt LYC=LY should be triggered
     if (this.readByte(Constants.LYC_REG) == this.y) {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
-      this.evalStatInterrupt();
     }
     else {
       this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
     }
+    this.evalStatInterrupt();
   }
 
   getColorRGB(colorId, palette) {
@@ -3061,58 +3059,6 @@ class Joypad {
   // Get current button status for dpad or action buttons
   read() {
     return this.buttons[this.select];
-  }
-}
-
-
-class Console {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.canvas.width = 500;
-    this.canvas.height = 200;
-    this.ctx = canvas.getContext('2d');
-    this.ctx.font = '12px serif';
-    this.ctx.fontColor = 'black';
-    this.colWidth = 10;
-    this.lineHeight = 12;
-  }
-
-  cpuFlagsToText(cpu) {
-    return cpu.getFlag("Z") ? "Z" : "-" + cpu.getFlag("N") ? "N" : "-" + cpu.getFlag("H") ? "H" : "-" + cpu.getFlag("C") ? "C" : "-";
-  }
-
-  print(text, col, line) {
-    let x = (col * this.colWidth);
-    let y = (line * this.lineHeight) + this.lineHeight;
-    this.ctx.fillText(text, x, y);
-  }
-
-  clear() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-  }
-
-  update(dmg) {
-    this.clear();
-    this.updateRegisters(dmg);
-    this.updateCode(dmg);
-  }
-
-  updateCode(dmg) {
-    this.print("opcode=" + hexify(dmg.cpu.code || ''), 0, 6);
-    this.print("cycles=" + dmg.cpu.totalCycles, 10, 6);
-  }
-
-  updateRegisters(dmg) {
-    this.print("A=" + dmg.cpu.A, 0, 1);
-    this.print("F=" + this.cpuFlagsToText(dmg.cpu), 10, 1)
-    this.print("B=" + dmg.cpu.B, 0, 2);
-    this.print("C=" + dmg.cpu.C, 10, 2);
-    this.print("D=" + dmg.cpu.D, 0, 3);
-    this.print("E=" + dmg.cpu.E, 10, 3);
-    this.print("H=" + dmg.cpu.H, 0, 4);
-    this.print("L=" + dmg.cpu.L, 10, 4);
-    this.print("SP=" + hexify(dmg.cpu.SP), 0, 5);
-    this.print("PC=" + hexify(dmg.cpu.PC), 10, 5);
   }
 }
 

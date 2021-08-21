@@ -34,10 +34,10 @@ class Constants {
   static STAT_VBLANK_ON   = 1 << 4;
   static STAT_HBLANK_ON   = 1 << 3;
   static STAT_LYCLY_EQUAL = 1 << 2;
-  static STAT_TRANSFER_MODE = 3;
-  static STAT_OAM_MODE = 2;
-  static STAT_VBLANK_MODE = 1;
-  static STAT_HBLANK_MODE = 0;
+  static STAT_HBLANK_MODE = 0;    // mode 0
+  static STAT_VBLANK_MODE = 1;    // mode 1
+  static STAT_OAM_MODE = 2;       // mode 2
+  static STAT_TRANSFER_MODE = 3;  // mode 3
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;

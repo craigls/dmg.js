@@ -10,14 +10,14 @@ const CONTROLS = {
 }
 
 class DMG {
-  constructor(cpu, ppu, mmu, screen, joypad, cons) {
+  constructor(cpu, ppu, mmu, screen, joypad, vramviewer) {
     this.cpu = cpu;
     this.ppu = ppu;
     this.mmu = mmu;
+    this.vramviewer = vramviewer;
     this.screen = screen;
     this.joypad = joypad;
-    this.console = cons;
-    this.cycles_per_frame = Constants.CYCLES_PER_FRAME;
+    this.cyclesPerFrame = Constants.CYCLES_PER_FRAME;
     this.started = false;
   }
 
@@ -91,7 +91,7 @@ class DMG {
   // Thank you http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
   nextFrame() {
     let total = 0;
-    while (total < this.cycles_per_frame) {
+    while (total < this.cyclesPerFrame) {
       let cycles = this.cpu.update();
       this.ppu.update(cycles);
       total += cycles;
@@ -99,7 +99,7 @@ class DMG {
     this.cycles += total;
     this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
-    requestAnimationFrame(() => this.console ? this.console.update(this) : {});
+    requestAnimationFrame(() => this.vramviewer ? this.vramviewer.update() : null);
   }
 
   update() {
@@ -131,12 +131,13 @@ class DMG {
 window.createDMG = () => {
   let screenElem = document.getElementById('screen');
   let consoleElem = document.getElementById('console');
+  let vvElem = document.getElementById('vramviewer');
   let joypad = new Joypad();
   let mmu = new MMU(joypad);
   let ppu = new PPU(mmu);
   let screen = new LCDScreen(screenElem, ppu);
   let cpu = new CPU(mmu, ppu);
-  // let cons = new Console(consoleElem, 500, 200);
+  //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, mmu, screen, joypad);
 }
 
