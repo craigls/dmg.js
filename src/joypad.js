@@ -1,4 +1,3 @@
-
 // Joypad Controller
 class Joypad {
   constructor() {

@@ -1,23 +1,22 @@
-/*
- * Memory Map
- * Taken from https://gbdev.io/pandocs
- *
- * 0x0000 0x3fff: 16 KiB ROM bank 00 From cartridge, usually a fixed bank
- * 0x4000 0x7fff: 16 KiB ROM Bank 01~NN From cartridge, switchable bank via mapper (if any)
- * 0x8000 0x9fff: 8 KiB Video RAM (VRAM) In CGB mode, switchable bank 0/1
- * 0xa000 0xbfff: 8 KiB External RAM From cartridge, switchable bank if any
- * 0xc000 0xcfff: 4 KiB Work RAM (WRAM)
- * 0xd000 0xdfff: 4 KiB Work RAM (WRAM) In CGB mode, switchable bank 1~7
- * 0xe000 0xfdff: Mirror of C000~DDFF (ECHO RAM) Nintendo says use of this area is prohibited.
- * 0xfe00 0xfe9f: Sprite attribute table (OAM)
- * 0xfea0 0xfeff: Not Usable Nintendo says use of this area is prohibited
- * 0xff00 0xff7f: I/O Registers
- * 0xff80 0xfffe: High RAM (HRAM)
- * 0xffff 0xffff: Interrupts Enable Register (IE)
- *
- */
-
+// MMU
 class MMU {
+  /*
+   * Memory Map: (source: https://gbdev.io/pandocs)
+   *
+   * 0x0000 0x3fff: 16 KiB ROM bank 00 From cartridge, usually a fixed bank
+   * 0x4000 0x7fff: 16 KiB ROM Bank 01~NN From cartridge, switchable bank via mapper (if any)
+   * 0x8000 0x9fff: 8 KiB Video RAM (VRAM) In CGB mode, switchable bank 0/1
+   * 0xa000 0xbfff: 8 KiB External RAM From cartridge, switchable bank if any
+   * 0xc000 0xcfff: 4 KiB Work RAM (WRAM)
+   * 0xd000 0xdfff: 4 KiB Work RAM (WRAM) In CGB mode, switchable bank 1~7
+   * 0xe000 0xfdff: Mirror of C000~DDFF (ECHO RAM) Nintendo says use of this area is prohibited.
+   * 0xfe00 0xfe9f: Sprite attribute table (OAM)
+   * 0xfea0 0xfeff: Not Usable Nintendo says use of this area is prohibited
+   * 0xff00 0xff7f: I/O Registers
+   * 0xff80 0xfffe: High RAM (HRAM)
+   * 0xffff 0xffff: Interrupts Enable Register (IE)
+   *
+   */
   constructor(joypad) {
     this.rom1 = null;
     this.rom2 = null;

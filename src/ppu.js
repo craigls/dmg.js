@@ -1,41 +1,48 @@
-/* 0x8000 0x8fff: Sprite tiles
- * 0x9800 0x9bff: BG tile map (0)
- * 0xfe00 0xfe9f: Sprit OAM table
- *
- *
- * VRAM Sprite Attributes Table:
- *
- * byte 0: y position
- * byte 1: x position
- * byte 2: tile index
- * byte 3: attributes/flags:
- * bit 7: bg and window over obj (0=no, 1=bg and window colors 1-3 over obj)
- * bit 6: y flip
- * bit 5: x flip
- * bit 4: paletter number
- * bit 3: gameboy color only
- * bit 2-0: gameboy color only
- *
- */
-
+// PPU
 class PPU {
+  /*
+   * Memory Locations:
+   *
+   * 0x8000 0x8fff: Sprite tiles
+   * 0x9800 0x9bff: BG tile map (0)
+   * 0xfe00 0xfe9f: Sprit OAM table
+   *
+   * VRAM Sprite Attributes Table:
+   *
+   * byte 0: y position
+   * byte 1: x position
+   * byte 2: tile index
+   * byte 3: attributes/flags:
+   * bit 7: bg and window over obj (0=no, 1=bg and window colors 1-3 over obj)
+   * bit 6: y flip
+   * bit 5: x flip
+   * bit 4: paletter number
+   * bit 3: gameboy color only
+   * bit 2-0: gameboy color only
+   *
+   */
+
   constructor(mmu) {
     this.mmu = mmu;
     this.tileData = new Uint8Array(16);
     this.spriteData = new Uint8Array(32);
+    this.tileSize = 8;
+    this.bgNumTiles = 32;
     this.x = 0;
     this.y = 0;
     this.frameBuf = null;
     this.cycles = 0;
     this.LCDEnabled = false;
+    this.sprites = [];
   }
 
   reset() {
     this.x = 0;
     this.y = 0;
-    this.frameBuf = new ImageData(Constants.FRAMEBUF_WIDTH, Constants.FRAMEBUF_HEIGHT);
+    this.frameBuf = new ImageData(Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT);
     this.cycles = 0;
     this.LCDEnabled = false;
+    this.sprites = [];
   }
 
   readByte(loc) {
@@ -57,16 +64,15 @@ class PPU {
     this.writeByte(Constants.STAT_REG, stat | statMode);
   }
 
+  // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
-    // Evaluate stat interrupt line
     let stat = this.readByte(Constants.STAT_REG);
-    let interrupt = stat & Constants.STAT_LYCLY_EQUAL && stat & Constants.STAT_LYCLY_ON;
-    interrupt ||= stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ON;
-    interrupt ||= stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ON;
-    interrupt ||= stat & Constants.STATS_HBLANK_MODE && stat & Constants.STAT_HBLANK_ON;
+    let interrupt = stat & Constants.STAT_LYCLY_EQUAL && stat & Constants.STAT_LYCLY_ENABLE;
+    interrupt ||= stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
+    interrupt ||= stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ENABLE;
+    interrupt ||= stat & Constants.STATS_HBLANK_MODE && stat & Constants.STAT_HBLANK_ENABLE;
 
     if (interrupt) {
-      // Interrupt line transitioning from low to high.
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
     }
     else {
@@ -74,29 +80,12 @@ class PPU {
     }
   }
 
-  cycleStatMode() {
-    // Pandocs: PPU should cycle between modes 2, 3, 0 every 456 cycles
-    // This code isn't accurate as the duration of mode 3 is dependent
-    // on the number of sprites to render. But it seems to work ok (for now)
-    let n = Math.floor(this.cycles / 456) % 3;
-    switch (n) {
-      case 0:
-        this.setStatMode(Constants.STAT_OAM_MODE); // mode 2
-        break;
-      case 1:
-        this.setStatMode(Constants.STAT_TRANSFER_MODE); // mode 3
-        break;
-      case 2:
-        this.setStatMode(Constants.STAT_HBLANK_MODE); // mode 0
-        break
-    }
-  }
-
+  // Update the PPU for (n) cycles
   update(cycles) {
     this.cycles += cycles;
     this.spriteHeight = this.readByte(Constants.LCDC_REG) & Constants.LCDC_OBJ_SIZE ? 16 : 8;
-
     this.LCDEnabled = this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE ? true : false;
+
     // LCD Disabled
     if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
@@ -104,65 +93,94 @@ class PPU {
       return;
     }
 
-    if (this.x >= Constants.FRAMEBUF_WIDTH) {
-      this.x = 0;
-      this.y++;
+    // First update should fetch sprites for scanline 0
+    if (this.cycles === 0) {
+      this.sprites = this.getSpritesForLine(this.y);
+      //this.setStatMode(Constants.STAT_OAM_MODE);
     }
 
-    // Begin vblank at scanline 144
-    if (this.y == 144) {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
-      this.setStatMode(Constants.STAT_VBLANK_MODE);
-    }
-
-    // If not vblank: cycle LCD status modes
-    else if (this.y < 144) {
-      this.cycleStatMode();
-    }
-
-    // End of vblank
-    else if (this.y == 154) {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
-      this.y = 0;
-    }
-
-    let sprites = this.getSpritesForLine(this.y);
-
-    // Draw background pixels for n cycles
-    if (this.y < Constants.FRAMEBUF_HEIGHT) {
-      let end = this.x + cycles;
-      while (this.x < Constants.FRAMEBUF_WIDTH) {
+    // For each CPU cycle, advance the PPU's state
+    while (cycles--) {
+      // Render BG and sprites if x & y are within screen boundary
+      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
         this.drawBackground(this.x, this.y);
-        this.drawSprites(sprites, this.x, this.y);
-        this.x++;
-        if (this.x == end) {
-          break;
+        this.drawSprites(this.sprites, this.x, this.y);
+      }
+
+      this.x++;
+
+      // End HBLANK
+      if (this.x == 456) {
+        this.x = 0;
+
+        // End VBLANK
+        if (this.y == 154) {
+          this.y = 0;
+
+          // Reset VBLANK interrupt flag
+          this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
+        }
+        else {
+          this.y++;
+
+          // Begin VBLANK
+          if (this.y == 144) {
+            // Set VBLANK interrupt flag, update STAT mode
+            this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+          }
+        }
+
+        // Get sprites for the current line
+        this.sprites = this.getSpritesForLine(this.y);
+
+        // Update LY register with new y value
+        this.writeByte(Constants.LY_REG, this.y);
+
+        // Set LYC=LY flag
+        if (this.readByte(Constants.LYC_REG) == this.y) {
+          this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
+        }
+        else {
+          this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
         }
       }
-    }
-    this.writeByte(Constants.LY_REG, this.y);
 
-    // Check if STAT interrupt LYC=LY should be triggered
-    if (this.readByte(Constants.LYC_REG) == this.y) {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
+      // Determine the correct STAT mode
+      // This code isn't cycle accurate as the duration of mode 3 is dependent
+      // on the number of sprites to render (which in turn shortens the length of mode 0)
+
+      // Set VBLANK STAT mode
+      if (this.y == 144 && this.x === 0) {
+        this.setStatMode(Constants.STAT_VBLANK_MODE);
+      }
+
+      // Other STAT modes
+      else if (this.y < 144) {
+        if (this.x === 0) {
+          this.setStatMode(Constants.STAT_OAM_MODE);
+        }
+        else if (this.x === 80) {
+          this.setStatMode(Constants.STAT_TRANSFER_MODE);
+        }
+        else if (this.x === 252) {
+          this.setStatMode(Constants.STAT_HBLANK_MODE);
+        }
+      }
+      this.evalStatInterrupt();
     }
-    else {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
-    }
-    this.evalStatInterrupt();
   }
 
   getColorRGB(colorId, palette) {
     return Constants.DEFAULT_PALETTE[(palette >> (2 * colorId)) & 0b11];
   }
 
+  // Finds the memory address of tile containing pixel at x, y
   getTileAtCoords(x, y) {
-    // Finds the memory address of tile containing pixel at x, y
-    let yTiles = Math.floor(y / Constants.TILE_SIZE) % Constants.BG_NUM_TILES;
-    let xTiles = Math.floor(x / Constants.TILE_SIZE) % Constants.BG_NUM_TILES;
+    let yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
+    let xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
 
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
-    let tileNum = xTiles + yTiles * Constants.BG_NUM_TILES;
+    let tileNum = xTiles + yTiles * this.bgNumTiles;
 
     // BG tilemap begins at 0x9800 or 9c000
     let base = this.readByte(Constants.LCDC_REG) & Constants.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
@@ -170,9 +188,9 @@ class PPU {
     return this.readByte(base + tileNum);
   }
 
+  // Get tile data for tile id
+  // Each tile uses 16 bytes of memory
   getTileData(tileIndex) {
-    // Get tile data for tile id
-    // Each tile uses 16 bytes of memory
 
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
@@ -194,23 +212,23 @@ class PPU {
     return this.tileData;
   }
 
+  // Draws a single pixel of the BG tilemap for x, y
   drawBackground(x, y) {
-    // Draws a single pixel of the BG tilemap for x, y
     let scrollX = this.readByte(Constants.SCROLLX_REG);
     let scrollY = this.readByte(Constants.SCROLLY_REG);
 
     let tileIndex = this.getTileAtCoords(x + scrollX, y + scrollY);
     let tile = this.getTileData(tileIndex);
-    let tileX = (x + scrollX) % Constants.TILE_SIZE;
-    let tileY = (y + scrollY) % Constants.TILE_SIZE;
+    let tileX = (x + scrollX) % this.tileSize;
+    let tileY = (y + scrollY) % this.tileSize;
 
     let colorId = this.getPixelColor(tile, tileX, tileY);
     let rgb = this.getColorRGB(colorId, this.readByte(Constants.BGP_REG));
     this.drawPixel(x, y, rgb);
   }
 
+  // Get color id of tile data at pixel x,y
   getPixelColor(tile, x, y) {
-    // Get color id of tile data at pixel x,y
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
@@ -222,6 +240,7 @@ class PPU {
     return (hi << 1) + lo;
   }
 
+  // Get sprite OAM data at (index)
   getSpriteOAM(index) {
     let oam = this.mmu.oam;
     let offset = index * 4;
@@ -293,7 +312,7 @@ class PPU {
 
   drawPixel(x, y, rgb) {
     let data = this.frameBuf.data;
-    let offset = (y * Constants.FRAMEBUF_WIDTH + x) * 4;
+    let offset = (y * Constants.VIEWPORT_WIDTH + x) * 4;
 
     data[offset] = rgb[0];
     data[offset + 1] = rgb[1];

@@ -1,3 +1,4 @@
+// Utility functions
 
 function hexify(h) {
   if (h === undefined || h === null) return '(none)';

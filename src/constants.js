@@ -1,4 +1,4 @@
-
+// Constant values that need to be globally accessible
 class Constants {
 
   // Emulator timing settings
@@ -29,11 +29,11 @@ class Constants {
 
   // LCD status register interrupt sources/flags
   static STAT_REG = 0xff41;
-  static STAT_LYCLY_ON    = 1 << 6;
-  static STAT_OAM_ON      = 1 << 5;
-  static STAT_VBLANK_ON   = 1 << 4;
-  static STAT_HBLANK_ON   = 1 << 3;
-  static STAT_LYCLY_EQUAL = 1 << 2;
+  static STAT_LYCLY_ENABLE    = 1 << 6;
+  static STAT_OAM_ENABLE      = 1 << 5;
+  static STAT_VBLANK_ENABLE   = 1 << 4;
+  static STAT_HBLANK_ENABLE   = 1 << 3;
+  static STAT_LYCLY_EQUAL     = 1 << 2;
   static STAT_HBLANK_MODE = 0;    // mode 0
   static STAT_VBLANK_MODE = 1;    // mode 1
   static STAT_OAM_MODE = 2;       // mode 2
@@ -64,11 +64,6 @@ class Constants {
   // Misc PPU
   static SCROLLY_REG = 0xff42;
   static SCROLLX_REG = 0xff43;
-
-  static BG_NUM_TILES = 32;
-  static TILE_SIZE = 8;
-  static FRAMEBUF_WIDTH = 256;
-  static FRAMEBUF_HEIGHT = 256;
 
   // Screen
   static VIEWPORT_WIDTH = 160;

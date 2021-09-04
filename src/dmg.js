@@ -1,3 +1,5 @@
+// Main emulation code
+
 const CONTROLS = {
   "w": "up",
   "s": "down",

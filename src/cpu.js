@@ -1,7 +1,7 @@
+// CPU
 class CPU {
-  constructor(mmu, ppu) {
+  constructor(mmu) {
     this.mmu = mmu;
-    this.ppu = ppu;
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -78,9 +78,9 @@ class CPU {
     return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
   }
 
+  // Decodes an opcode using the algorithm from:
+  // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
   decode(code) {
-    // Decodes an opcode using the algorithm from:
-    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
     let x = (code & 0b11000000) >> 6;
     let y = (code & 0b00111000) >> 3;
     let z = (code & 0b00000111);
