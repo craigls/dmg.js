@@ -109,25 +109,23 @@ class PPU {
 
       this.x++;
 
-      // End HBLANK
+      // End HBLANK - update next scanline
       if (this.x == 456) {
         this.x = 0;
+        this.y++;
 
-        // End VBLANK
-        if (this.y == 154) {
+        // Begin VBLANK
+        if (this.y == 144) {
+          // Set VBLANK interrupt flag, update STAT mode
+          this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+        }
+
+        // End VBLANK - reset to scanline 0
+        else if (this.y == 154) {
           this.y = 0;
 
           // Reset VBLANK interrupt flag
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
-        }
-        else {
-          this.y++;
-
-          // Begin VBLANK
-          if (this.y == 144) {
-            // Set VBLANK interrupt flag, update STAT mode
-            this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
-          }
         }
 
         // Get sprites for the current line
