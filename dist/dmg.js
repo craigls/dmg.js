@@ -2542,6 +2542,8 @@ class PPU {
 
   // Update the PPU for (n) cycles
   update(cycles) {
+    let statMode;
+
     this.cycles += cycles;
     this.spriteHeight = this.readByte(Constants.LCDC_REG) & Constants.LCDC_OBJ_SIZE ? 16 : 8;
     this.LCDEnabled = this.readByte(Constants.LCDC_REG) & Constants.LCDC_ENABLE ? true : false;
@@ -2553,79 +2555,74 @@ class PPU {
       return;
     }
 
-    // First update should fetch sprites for scanline 0
-    if (this.cycles === 0) {
-      this.sprites = this.getSpritesForLine(this.y);
-      //this.setStatMode(Constants.STAT_OAM_MODE);
-    }
-
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
-      // Render BG and sprites if x & y are within screen boundary
-      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
-        this.drawBackground(this.x, this.y);
-        this.drawSprites(this.sprites, this.x, this.y);
-      }
-
-      this.x++;
 
       // End HBLANK - update next scanline
       if (this.x == 456) {
         this.x = 0;
         this.y++;
 
+        this.writeByte(Constants.LY_REG, this.y);
+
         // Begin VBLANK
         if (this.y == 144) {
-          // Set VBLANK interrupt flag, update STAT mode
+          // Set VBLANK STAT mode & interrupt flag
+          statMode = Constants.STAT_VBLANK_MODE;
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
         }
 
         // End VBLANK - reset to scanline 0
         else if (this.y == 154) {
           this.y = 0;
-
           // Reset VBLANK interrupt flag
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
         }
 
-        // Get sprites for the current line
-        this.sprites = this.getSpritesForLine(this.y);
-
         // Update LY register with new y value
         this.writeByte(Constants.LY_REG, this.y);
 
-        // Set LYC=LY flag
-        if (this.readByte(Constants.LYC_REG) == this.y) {
-          this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
-        }
-        else {
-          this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
-        }
+        // Get sprites for the current line
+        this.sprites = this.getSpritesForLine(this.y);
+
       }
-
-      // Determine the correct STAT mode
-      // This code isn't cycle accurate as the duration of mode 3 is dependent
-      // on the number of sprites to render (which in turn shortens the length of mode 0)
-
-      // Set VBLANK STAT mode
-      if (this.y == 144 && this.x === 0) {
-        this.setStatMode(Constants.STAT_VBLANK_MODE);
-      }
-
-      // Other STAT modes
+      // Set STAT mode when in non-VBLANK state
       else if (this.y < 144) {
         if (this.x === 0) {
-          this.setStatMode(Constants.STAT_OAM_MODE);
+          statMode = Constants.STAT_OAM_MODE;
         }
         else if (this.x === 80) {
-          this.setStatMode(Constants.STAT_TRANSFER_MODE);
+          statMode = Constants.STAT_TRANSFER_MODE;
         }
         else if (this.x === 252) {
-          this.setStatMode(Constants.STAT_HBLANK_MODE);
+          statMode = Constants.STAT_HBLANK_MODE;
         }
       }
+      // Render BG and sprites if x & y are within screen boundary
+      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
+        this.drawBackground(this.x, this.y);
+        this.drawSprites(this.sprites, this.x, this.y);
+      }
+      this.x++;
+    }
+
+    let curStatMode = this.readByte(Constants.STAT_REG) & 0b11;
+
+    // Update STAT mode if different than current
+    if (statMode !== curStatMode) {
+      this.setStatMode(statMode);
       this.evalStatInterrupt();
     }
+
+    // Set LYC=LY flag
+    if (this.readByte(Constants.LYC_REG) === this.readByte(Constants.LY_REG)) {
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
+      this.evalStatInterrupt();
+    }
+    else {
+      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
+    }
+
   }
 
   getColorRGB(colorId, palette) {
