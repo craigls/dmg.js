@@ -2557,6 +2557,11 @@ class PPU {
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
+      // Render BG and sprites if x & y are within screen boundary
+      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
+        this.drawBackground(this.x, this.y);
+        this.drawSprites(this.sprites, this.x, this.y);
+      }
 
       // End HBLANK - update next scanline
       if (this.x == 456) {
@@ -2587,23 +2592,20 @@ class PPU {
 
       }
       // Set STAT mode when in non-VBLANK state
-      else if (this.y < 144) {
-        if (this.x === 0) {
-          statMode = Constants.STAT_OAM_MODE;
+      else {
+        if (this.y < 144) {
+          if (this.x === 0) {
+            statMode = Constants.STAT_OAM_MODE;
+          }
+          else if (this.x === 80) {
+            statMode = Constants.STAT_TRANSFER_MODE;
+          }
+          else if (this.x === 252) {
+            statMode = Constants.STAT_HBLANK_MODE;
+          }
         }
-        else if (this.x === 80) {
-          statMode = Constants.STAT_TRANSFER_MODE;
-        }
-        else if (this.x === 252) {
-          statMode = Constants.STAT_HBLANK_MODE;
-        }
+        this.x++;
       }
-      // Render BG and sprites if x & y are within screen boundary
-      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
-        this.drawBackground(this.x, this.y);
-        this.drawSprites(this.sprites, this.x, this.y);
-      }
-      this.x++;
     }
 
     let curStatMode = this.readByte(Constants.STAT_REG) & 0b11;
