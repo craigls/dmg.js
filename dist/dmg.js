@@ -2524,19 +2524,30 @@ class PPU {
     this.writeByte(Constants.STAT_REG, stat | statMode);
   }
 
+  // Test if LYC=LY and request interrupt
+  evalLYCLYInterrupt() {
+    let stat = this.readByte(Constants.STAT_REG);
+    let LYCLYEqual = this.readByte(Constants.LYC_REG) === this.readByte(Constants.LY_REG);
+
+    if (LYCLYEqual && stat & Constants.STAT_LYCLY_ENABLE) {
+      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
+      this.writeByte(Constants.STAT_REG, stat | Constants.STAT_LYCLY_EQUAL);
+    }
+    else {
+      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
+      this.writeByte(Constants.STAT_REG, stat &= ~Constants.STAT_LYCLY_EQUAL);
+    }
+  }
+
   // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
     let stat = this.readByte(Constants.STAT_REG);
-    let interrupt = stat & Constants.STAT_LYCLY_EQUAL && stat & Constants.STAT_LYCLY_ENABLE;
-    interrupt ||= stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
+    let interrupt = stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
     interrupt ||= stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ENABLE;
     interrupt ||= stat & Constants.STATS_HBLANK_MODE && stat & Constants.STAT_HBLANK_ENABLE;
 
     if (interrupt) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-    }
-    else {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
     }
   }
 
@@ -2551,6 +2562,7 @@ class PPU {
     // LCD Disabled
     if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
+      this.evalLYCLYInterrupt();
       // TODO: clear screen
       return;
     }
@@ -2568,8 +2580,6 @@ class PPU {
         this.x = 0;
         this.y++;
 
-        this.writeByte(Constants.LY_REG, this.y);
-
         // Begin VBLANK
         if (this.y == 144) {
           // Set VBLANK STAT mode & interrupt flag
@@ -2584,8 +2594,9 @@ class PPU {
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
         }
 
-        // Update LY register with new y value
+        // Update LYC=LY
         this.writeByte(Constants.LY_REG, this.y);
+        this.evalLYCLYInterrupt();
 
         // Get sprites for the current line
         this.sprites = this.getSpritesForLine(this.y);
@@ -2615,16 +2626,6 @@ class PPU {
       this.setStatMode(statMode);
       this.evalStatInterrupt();
     }
-
-    // Set LYC=LY flag
-    if (this.readByte(Constants.LYC_REG) === this.readByte(Constants.LY_REG)) {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) | Constants.STAT_LYCLY_EQUAL);
-      this.evalStatInterrupt();
-    }
-    else {
-      this.writeByte(Constants.STAT_REG, this.readByte(Constants.STAT_REG) & ~Constants.STAT_LYCLY_EQUAL);
-    }
-
   }
 
   getColorRGB(colorId, palette) {
