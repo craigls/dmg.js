@@ -73,11 +73,6 @@ class CPU {
     return this.readByte(this.PC++);
   }
 
-  // Detects if half-carry occurs
-  isHalfCarry(a, b) {
-    return (((a & 0xf) + (b & 0xf)) & 0x10) === 0x10;
-  }
-
   // Decodes an opcode using the algorithm from:
   // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
   decode(code) {
@@ -296,35 +291,38 @@ class CPU {
   // Converts A register to BCD from previous add/sub op
   // More info at https://gbdev.gg8.se/wiki/articles/DAA
   DAA() {
-    // A to binary coded decimal
+    let n = this.A;
     if (this.getFlag("N")) {
       if (this.getFlag("C")) {
-        this.A -= 0x60;
+        n -= 0x60;
       }
       if (this.getFlag("H")) {
-        this.A -= 0x06;
+        n -= 0x06;
       }
     }
     else {
-      if (this.getFlag("C") || (this.A & 0xff) > 0x99) {
-        this.A += 0x60;
+      if (this.getFlag("C") || (n & 0xff) > 0x99) {
+        n += 0x60;
+        this.setFlag("C");
       }
-      if (this.getFlag("H") || (this.A & 0x0f) > 0x09) {
-        this.A += 0x06;
+      if (this.getFlag("H") || (n & 0x0f) > 0x09) {
+        n += 0x06;
       }
     }
-    // Set flags
-    this.clearFlag("H");
-    this.clearFlag("Z");
-    this.clearFlag("C");
-
-    if ((this.A & 0xff) === 0) {
+    if ((n & 0xff) === 0) {
       this.setFlag("Z");
     }
-    if (! this.getFlag("N") && this.A > 0x99) {
+    else {
+      this.clearFlag("Z");
+    }
+    if (n > 255) {
       this.setFlag("C");
     }
-    return this.A & 0xff;
+    else {
+      this.clearFlag("C");
+    }
+    this.clearFlag("H");
+    return n & 0xff;
   }
 
   // Return
@@ -695,7 +693,7 @@ class CPU {
     this.clearFlag("N");
     this.clearFlag("H");
 
-    if (this.isHalfCarry(n, 1)) {
+    if (((n & 0xf) + 1) & 0x10) {
       this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
@@ -718,7 +716,7 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("Z");
 
-    if (this.isHalfCarry(n, -1)) {
+    if (((n & 0xf) - 1) & 0x10) {
       this.setFlag("H");
     }
     if ((val & 0xff) === 0) {
@@ -755,7 +753,7 @@ class CPU {
     if (val > 255) {
       this.setFlag("C");
     }
-    if (this.isHalfCarry(this.A, b)) {
+    if (((this.A & 0xf) + (b & 0xf)) & 0x10) {
       this.setFlag("H");
     }
     return val & 0xff;
@@ -773,7 +771,7 @@ class CPU {
     if (val > 255) {
       this.setFlag("C");
     }
-    if (this.isHalfCarry(a1, b1 + carryLo)) {
+    if (((a1 & 0xf) + (b1 + carryLo & 0xf)) & 0x10) {
       this.setFlag("H");
     }
     return [(val >> 8) & 0xff, val & 0xff];
@@ -791,7 +789,7 @@ class CPU {
     if (val < 0) {
       this.setFlag("C");
     }
-    if (this.isHalfCarry(this.A, -b)) {
+    if (((this.A & 0xf) - (b & 0xf)) & 0x10) {
       this.setFlag("H");
     }
     if (this.A === b) {

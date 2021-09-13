@@ -73,10 +73,6 @@ class PPU {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
       this.writeByte(Constants.STAT_REG, stat | Constants.STAT_LYCLY_EQUAL);
     }
-    else {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_STAT);
-      this.writeByte(Constants.STAT_REG, stat &= ~Constants.STAT_LYCLY_EQUAL);
-    }
   }
 
   // Evaluate STAT interrupt line and request interrupt
@@ -130,8 +126,6 @@ class PPU {
         // End VBLANK - reset to scanline 0
         else if (this.y == 154) {
           this.y = 0;
-          // Reset VBLANK interrupt flag
-          this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_VBLANK);
         }
 
         // Update LYC=LY
