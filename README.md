@@ -4,9 +4,12 @@ I got inspired while watching the youtube channel of Modern Vintage Gamer.
 In a video, he discusses Game Boy emulation and how it is easy to implement. 
 So I wanted to try it for myself. 
 
-The emulator is able to run Tetris and it is basically playable, but there are bugs 
-and many missing features. This code shouldn't be used as a reference of any kind. 
-It's just for fun.
+The emulator is able to run a few games (like Tetris, Super Mario Land, Link's Awakening)
+but there's lots of bugs and missing features (sound, memory banking, etc).
+This project is just for fun and shouldn't be used as a reference.
+
+## How to run it
+Open dist/index.html in a browser, load a Game Boy ROM file (not included)
 
 ## Controls
 | key | button |

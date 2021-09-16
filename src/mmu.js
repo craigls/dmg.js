@@ -92,7 +92,7 @@ class MMU {
     else if (loc >= 0x4000 && loc <= 0x7fff) {
       // Memory bank switching is a work in progress!
       if (this.mbcType) {
-        return this.rom2[(loc - 0x4000) + (16384 * (this.bankNum1 - 1))];
+        return this.rom2[(loc - 0x4000) + (16384 * ((this.bankNum2 << 5) + this.bankNum1 - 1))];
       }
       else {
         return this.rom2[loc - 0x4000];
