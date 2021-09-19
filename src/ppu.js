@@ -314,7 +314,6 @@ class PPU {
       }
     }
     return sprites;
-    //return sprites.sort((a, b) => a < b || a.oamAddress < b.oamAddres);
   }
 
   drawSprites(x, y, bgColorId=0) {
