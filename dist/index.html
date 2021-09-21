@@ -1,6 +1,17 @@
 <html>
 <title>dmg.js</title>
-<head></head>
+<head>
+<style>
+canvas {
+  width: calc(160px * 3);
+  height: calc(144px * 3);
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+</style>
+</head>
 <body>
 <div>
 <canvas id="screen"></canvas>

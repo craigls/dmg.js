@@ -102,7 +102,7 @@ class Constants {
   // Color palette for emulator
   static DEFAULT_PALETTE = [
     [155, 188, 15], // lightest
-    [139, 172, 10], // light
+    [139, 172, 15], // light
     [48,  98,  48], // dark
     [15,  56,  15], // darkest
   ];
