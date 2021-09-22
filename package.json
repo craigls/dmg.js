@@ -11,8 +11,8 @@
     "npm-watch": "^0.10.0"
   },
   "scripts": {
-    "lint": "eslint dist/dmg.js",
-    "build": "node bin/build.js && eslint dist/dmg.js",
+    "lint": "eslint dist/index.js",
+    "build": "node bin/build.js && eslint dist/index.js",
     "watch": "npm-watch build"
   },
   "watch": {
