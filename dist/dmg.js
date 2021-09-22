@@ -1076,17 +1076,18 @@ class CPU {
 
   // Add register pairs
   ADD16(a1, a2, b1, b2) {
-    let carryLo = (a2 + b2 > 255) ? 1 : 0;
-    let val = uint16(a1, a2) + uint16(b1, b2);
+    let a = uint16(a1, a2);
+    let b = uint16(b1, b2);
+    let val = a + b;
 
     this.clearFlag("N");
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (val > 255) {
+    if (val > 65535) {
       this.setFlag("C");
     }
-    if (((a1 & 0xf) + (b1 + carryLo & 0xf)) & 0x10) {
+    if (((a & 0xfff) + (b & 0xfff)) & 0x1000) {
       this.setFlag("H");
     }
     return [(val >> 8) & 0xff, val & 0xff];
