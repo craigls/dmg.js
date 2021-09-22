@@ -14,6 +14,6 @@ var sourceFiles = [
   'src/footer.js',
 ]
 
-var outputFile = 'dist/dmg.js';
+var outputFile = 'dist/index.js';
 
 concat(sourceFiles, outputFile);
