@@ -786,13 +786,30 @@ class CPU {
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (val > 65535) {
+    if (val > 0xffff) {
       this.setFlag("C");
     }
     if (((a & 0xfff) + (b & 0xfff)) & 0x1000) {
       this.setFlag("H");
     }
     return [(val >> 8) & 0xff, val & 0xff];
+  }
+
+  ADDSPr8() {
+    let a = this.SP;
+    let b = this.read("r8");
+    let val = a + b;
+
+    this.clearFlag("H");
+    this.clearFlag("C");
+
+    if (((a & 0xfff) + (b & 0xfff)) & 0x1000) {
+      this.setFlag("H");
+    }
+    if (val > 0xffff) {
+      this.setFlag("C");
+    }
+    this.SP = val & 0xffff;
   }
 
   // Subtraction
@@ -1122,8 +1139,7 @@ class CPU {
 
       // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
       case 0xe8:
-        this.SP = uint16(this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8")));
-        this.clearFlag("Z");
+        this.ADDSPr8();
         this.cycles += 16;
         break;
 
@@ -1179,7 +1195,7 @@ class CPU {
       // 0xd9  RETI  length: 1  cycles: 16  flags: ----  group: control/br
       case 0xd9:
         this.RETI();
-        this.cycles = 16;
+        this.cycles += 16;
         break;
 
       // 0xf3  DI  length: 1  cycles: 4  flags: ----  group: control/misc
