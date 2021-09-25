@@ -1050,7 +1050,24 @@ class CPU {
   // Addition of a + b + carry bit
   ADC(b) {
     let carry = this.getFlag("C") ? 1 : 0;
-    return this.ADD(b + carry);
+    let val = this.A + b + carry;
+
+    this.clearFlag("Z");
+    this.clearFlag("H");
+    this.clearFlag("C");
+    this.clearFlag("N");
+
+    if (((this.A & 0xf) + (b & 0xf) + carry) & 0x10) {
+      this.setFlag("H");
+    }
+    if ((val & 0xff) === 0) {
+      this.setFlag("Z");
+    }
+    if (val > 255) {
+      this.setFlag("C");
+    }
+    return val & 0xff;
+
   }
 
   // Addition
@@ -1114,10 +1131,26 @@ class CPU {
     return val & 0xff;
   }
 
-  // Subtraction: a - (b + carry bit)
+  // Subtraction: a - b - carry bit
   SBC(b) {
     let carry = this.getFlag("C") ? 1 : 0;
-    return this.SUB(b + carry);
+    let val = this.A - b - carry;
+
+    this.clearFlag("Z");
+    this.clearFlag("H");
+    this.clearFlag("C");
+    this.setFlag("N");
+
+    if (val < 0) {
+      this.setFlag("C");
+    }
+    if (((this.A & 0xf) - (b & 0xf) - carry) & 0x10) {
+      this.setFlag("H");
+    }
+    if ((val & 0xff) === 0) {
+      this.setFlag("Z");
+    }
+    return val & 0xff;
   }
 
   // Restart command - jump to preset address
@@ -1135,8 +1168,7 @@ class CPU {
   CPL() {
     this.setFlag("N");
     this.setFlag("H");
-    this.A = ~this.A & 0xff;
-    return this.A;
+    return ~this.A & 0xff;
   }
 
   // Swap high/low nibbles
@@ -1160,7 +1192,12 @@ class CPU {
   CCF() {
     this.clearFlag("N");
     this.clearFlag("H");
-    this.clearFlag("C");
+    if (this.getFlag("C")) {
+      this.clearFlag("C");
+    }
+    else {
+      this.setFlag("C");
+    }
   }
 
   // Set carry flag
@@ -1536,8 +1573,7 @@ class CPU {
 
       // 0x18  JR r8  length: 2  cycles: 12  flags: ----  group: control/br
       case 0x18:
-        this.JR(this.read("r8"));
-        this.cycles += 12;
+        this.cycles += this.JR(this.read("r8"));
         break;
 
       case 0xa0: // 0xa0  AND B  length: 1  cycles: 4  flags: Z010  group: x8/alu
