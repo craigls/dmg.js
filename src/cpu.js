@@ -1200,7 +1200,6 @@ class CPU {
 
       // 0xf3  DI  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0xf3:
-        // TODO: Disable interrupt
         this.DI();
         this.cycles += 4;
         break;
@@ -1518,7 +1517,6 @@ class CPU {
 
       // 0x76  HALT  length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x76:
-        // TODO: Confirm correct behavior
         this.haltMode = !this.IMEEnabled;
         this.cycles += 4;
         break;
@@ -2020,7 +2018,7 @@ class CPU {
           case 0xbd: // (cb) 0xbd  RES 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbf: // (cb) 0xbf  RES 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
             r1 = this.r[cbop.z];
-            this[r1] = this.RES(cbop.y, r1);
+            this[r1] = this.RES(cbop.y, this[r1]);
             this.cycles += 8;
             break
 
