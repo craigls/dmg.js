@@ -1831,7 +1831,7 @@ class CPU {
 
           // (cb) 0x26  SLA (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x26:
-            this.writeByte(this.HL(), this.SLA(this.HL()));
+            this.writeByte(this.HL(), this.SLA(this.readByte(this.HL())));
             this.cycles += 8;
             break;
 

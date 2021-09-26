@@ -99,12 +99,12 @@ class Constants {
   static TAC_ENABLE = 4; // Timer enable
   static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
-  // Color palette for emulator
+  // Got this nice palette from https://lospec.com/palette-list/2bit-demichrome
   static DEFAULT_PALETTE = [
-    [155, 188, 15], // lightest
-    [139, 172, 15], // light
-    [48,  98,  48], // dark
-    [15,  56,  15], // darkest
+    [233, 239, 236], // lightest
+    [160, 160, 139], // light
+    [85,  85,  104], // dark
+    [30,  30,  32],  // darkest
   ];
 }
 
@@ -259,15 +259,17 @@ class DMG {
     if (button === undefined) {
       return
     }
-    this.joypad.buttonPressed(button, state);
+    if (this.started) {
+      this.joypad.buttonPressed(button, state);
 
-    // Request joypad interrupt on button press (state = true)
-    let ifreg = this.mmu.readByte(Constants.IF_REG);
-    if (state) {
-      this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
-    }
-    else {
-      this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
+      // Request joypad interrupt on button press (state = true)
+      let ifreg = this.mmu.readByte(Constants.IF_REG);
+      if (state) {
+        this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
+      }
+      else {
+        this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
+      }
     }
   }
 }
@@ -2146,7 +2148,7 @@ class CPU {
 
           // (cb) 0x26  SLA (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
           case 0x26:
-            this.writeByte(this.HL(), this.SLA(this.HL()));
+            this.writeByte(this.HL(), this.SLA(this.readByte(this.HL())));
             this.cycles += 8;
             break;
 
