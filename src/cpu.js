@@ -88,9 +88,6 @@ class CPU {
   read(param) {
 
     switch (param) {
-      case "(C)":
-        return 0xff00 + this.C;
-
       case "a8":
         return 0xff00 + this.nextByte();
 
@@ -309,17 +306,9 @@ class CPU {
         n += 0x06;
       }
     }
+    this.clearFlag("Z");
     if ((n & 0xff) === 0) {
       this.setFlag("Z");
-    }
-    else {
-      this.clearFlag("Z");
-    }
-    if (n > 255) {
-      this.setFlag("C");
-    }
-    else {
-      this.clearFlag("C");
     }
     this.clearFlag("H");
     return n & 0xff;
@@ -1302,13 +1291,13 @@ class CPU {
 
       // 0xe2  LD (C),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0xe2:
-        this.writeByte(this.read("(C)"), this.A);
+        this.writeByte(0xff00 + this.C, this.A);
         this.cycles += 8;
         break;
 
       // 0xf2  LD A,(C)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0xf2:
-        this.writeByte(this.A, this.read("(C)"));
+        this.A = this.readByte(0xff00 + this.C);
         this.cycles += 8;
         break;
 
