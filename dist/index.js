@@ -427,18 +427,18 @@ class CPU {
   }
 
   popStack() {
-    this.SP++;
     let lo = this.readByte(this.SP);
     this.SP++;
     let hi = this.readByte(this.SP);
+    this.SP++;
     return uint16(hi, lo);
   }
 
   pushStack(val) {
+    this.SP--;
     this.writeByte(this.SP, val >> 8);
     this.SP--;
     this.writeByte(this.SP, val & 0xff);
-    this.SP--;
   }
 
   HL() {
@@ -1101,21 +1101,21 @@ class CPU {
     return [(val >> 8) & 0xff, val & 0xff];
   }
 
-  ADDSPr8() {
-    let a = this.SP;
-    let b = this.read("r8");
-    let val = a + b;
+  ADDSP(n) {
+    let val = this.SP + n;
 
+    this.clearFlag("Z");
+    this.clearFlag("N");
     this.clearFlag("H");
     this.clearFlag("C");
 
-    if (((a & 0xfff) + (b & 0xfff)) & 0x1000) {
+    if (((this.SP & 0xf) + (n & 0xf)) & 0x10) {
       this.setFlag("H");
     }
-    if (val > 0xffff) {
+    if (val > 0xff) {
       this.setFlag("C");
     }
-    this.SP = val & 0xffff;
+    return val & 0xffff;
   }
 
   // Subtraction
@@ -1230,6 +1230,7 @@ class CPU {
     let cbop;
     let addr;
     let op = this.decode(code);
+    let val;
 
     this.code = code;
     this.cbcode = null;
@@ -1445,7 +1446,7 @@ class CPU {
 
       // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
       case 0xe8:
-        this.ADDSPr8();
+        this.SP = this.ADDSP(this.read("r8"));
         this.cycles += 16;
         break;
 
@@ -1477,8 +1478,9 @@ class CPU {
 
       // 0xf8  LD HL,SP+r8  length: 2  cycles: 12  flags: 00HC  group: x16/lsm
       case 0xf8:
-        [this.H, this.L] = this.ADD16(this.SP >> 8, this.SP & 0xff, 0, this.read("r8"));
-        this.clearFlag("Z");
+        val = this.ADDSP(this.read("r8"));
+        this.H = val >> 8;
+        this.L = val & 0xff;
         this.cycles += 12;
         break;
 
