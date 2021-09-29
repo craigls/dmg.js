@@ -96,12 +96,12 @@ class Constants {
   static TAC_ENABLE = 4; // Timer enable
   static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
-  // Got this nice palette from https://lospec.com/palette-list/2bit-demichrome
+  // Palette
   static DEFAULT_PALETTE = [
-    [233, 239, 236], // lightest
-    [160, 160, 139], // light
-    [85,  85,  104], // dark
-    [30,  30,  32],  // darkest
+    [155, 188, 15], // lightest
+    [139, 172, 15], // light
+    [48,  98,  48], // dark
+    [15,  56,  15], // darkest
   ];
 }
 
