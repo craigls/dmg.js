@@ -244,7 +244,6 @@ class DMG {
       total += cycles;
     }
     this.cycles += total;
-    this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
     requestAnimationFrame(() => this.vramviewer ? this.vramviewer.update() : null);
   }
@@ -283,8 +282,8 @@ window.createDMG = () => {
   let vvElem = document.getElementById('vramviewer');
   let joypad = new Joypad();
   let mmu = new MMU(joypad);
-  let ppu = new PPU(mmu);
-  let screen = new LCDScreen(screenElem, ppu);
+  let screen = new LCDScreen(screenElem);
+  let ppu = new PPU(mmu, screen);
   let cpu = new CPU(mmu, ppu);
   //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, mmu, screen, joypad);
@@ -2526,8 +2525,9 @@ class PPU {
    *
    */
 
-  constructor(mmu) {
+  constructor(mmu, screen) {
     this.mmu = mmu;
+    this.screen = screen;
     this.tileData = new Uint8Array(16);
     this.spriteData = new Uint8Array(32);
     this.spriteHeight = 8;
@@ -2647,6 +2647,7 @@ class PPU {
           // Set VBLANK STAT mode & interrupt flag
           statMode = Constants.STAT_VBLANK_MODE;
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+          this.screen.update(this.frameBuf);
         }
 
         // End VBLANK - reset to scanline 0
@@ -2700,7 +2701,7 @@ class PPU {
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
     let tileNum = xTiles + yTiles * this.bgNumTiles;
 
-    return this.readByte(base + tileNum);
+    return this.mmu.vram[base + tileNum - 0x8000];
   }
 
   // Get tile data for tile id
@@ -3108,17 +3109,16 @@ class MMU {
 
 // LCDScreen
 class LCDScreen {
-  constructor(canvas, ppu) {
+  constructor(canvas) {
     this.canvas = canvas;
-    this.ppu = ppu;
     this.canvas.width = Constants.VIEWPORT_WIDTH;
     this.canvas.height = Constants.VIEWPORT_HEIGHT;
     this.ctx = canvas.getContext('2d');
   }
 
   // Draws the contents of PPU's frame buffer to an HTML canvas
-  update() {
-    this.ctx.putImageData(this.ppu.frameBuf, 0, 0, 0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT)
+  update(imageData) {
+    this.ctx.putImageData(imageData, 0, 0, 0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT)
   }
 }
 

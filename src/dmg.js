@@ -99,7 +99,6 @@ class DMG {
       total += cycles;
     }
     this.cycles += total;
-    this.screen.update();
     requestAnimationFrame(() => this.nextFrame());
     requestAnimationFrame(() => this.vramviewer ? this.vramviewer.update() : null);
   }
@@ -138,8 +137,8 @@ window.createDMG = () => {
   let vvElem = document.getElementById('vramviewer');
   let joypad = new Joypad();
   let mmu = new MMU(joypad);
-  let ppu = new PPU(mmu);
-  let screen = new LCDScreen(screenElem, ppu);
+  let screen = new LCDScreen(screenElem);
+  let ppu = new PPU(mmu, screen);
   let cpu = new CPU(mmu, ppu);
   //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, mmu, screen, joypad);

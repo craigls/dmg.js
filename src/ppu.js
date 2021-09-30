@@ -22,8 +22,9 @@ class PPU {
    *
    */
 
-  constructor(mmu) {
+  constructor(mmu, screen) {
     this.mmu = mmu;
+    this.screen = screen;
     this.tileData = new Uint8Array(16);
     this.spriteData = new Uint8Array(32);
     this.spriteHeight = 8;
@@ -143,6 +144,7 @@ class PPU {
           // Set VBLANK STAT mode & interrupt flag
           statMode = Constants.STAT_VBLANK_MODE;
           this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+          this.screen.update(this.frameBuf);
         }
 
         // End VBLANK - reset to scanline 0
@@ -196,7 +198,7 @@ class PPU {
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
     let tileNum = xTiles + yTiles * this.bgNumTiles;
 
-    return this.readByte(base + tileNum);
+    return this.mmu.vram[base + tileNum - 0x8000];
   }
 
   // Get tile data for tile id
