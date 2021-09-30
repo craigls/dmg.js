@@ -101,10 +101,10 @@ class Constants {
 
   // Palette
   static DEFAULT_PALETTE = [
-    [155, 188, 15], // lightest
-    [139, 172, 15], // light
-    [48,  98,  48], // dark
-    [15,  56,  15], // darkest
+    [224, 248, 208],  // lightest
+    [136, 192,112],   // light
+    [52, 104,86],     // dark
+    [8, 24, 32],      // darkest
   ];
 }
 
@@ -782,7 +782,7 @@ class CPU {
     this.clearFlag("H");
 
     // Set C and Z from resulting rotation
-    if (rot > 255) {
+    if (rot > 0xff) {
       this.setFlag("C");
     }
     if ((rot & 0xff) === 0) {
@@ -1054,7 +1054,7 @@ class CPU {
     if ((val & 0xff) === 0) {
       this.setFlag("Z");
     }
-    if (val > 255) {
+    if (val > 0xff) {
       this.setFlag("C");
     }
     return val & 0xff;
@@ -1073,7 +1073,7 @@ class CPU {
     if ((val & 0xff) === 0) {
       this.setFlag("Z");
     }
-    if (val > 255) {
+    if (val > 0xff) {
       this.setFlag("C");
     }
     if (((this.A & 0xf) + (b & 0xf)) & 0x10) {
@@ -2475,7 +2475,7 @@ class CPU {
       this.timer += this.cycles / freq;
 
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
-      if (this.timer > 255) {
+      if (this.timer > 0xff) {
         this.timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
       }
@@ -2493,7 +2493,7 @@ class CPU {
   // CPU update
   update() {
     this.cycles = 0;
-    this.prevcode = this.code;
+    this.prevCode = this.code;
     this.nextInstruction();
     this.updateTimers();
     this.updateInterrupts();

@@ -98,10 +98,10 @@ class Constants {
 
   // Palette
   static DEFAULT_PALETTE = [
-    [155, 188, 15], // lightest
-    [139, 172, 15], // light
-    [48,  98,  48], // dark
-    [15,  56,  15], // darkest
+    [224, 248, 208],  // lightest
+    [136, 192,112],   // light
+    [52, 104,86],     // dark
+    [8, 24, 32],      // darkest
   ];
 }
 
