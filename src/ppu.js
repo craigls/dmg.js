@@ -130,7 +130,7 @@ class PPU {
           this.drawWindow(this.x, this.y);
         }
         if (this.LCDC & Constants.LCDC_OBJ_ENABLE) {
-          this.drawSprites(this.x, this.y, this.bgColorId);
+          this.drawSprites(this.x, this.y);
         }
       }
 
@@ -318,7 +318,7 @@ class PPU {
     return sprites;
   }
 
-  drawSprites(x, y, bgColorId=0) {
+  drawSprites(x, y) {
     this.spriteHeight = this.LCDC & Constants.LCDC_OBJ_SIZE ? 16 : 8;
 
     for (let n = 0; n < this.sprites.length; n++) {
@@ -338,7 +338,7 @@ class PPU {
         let colorId = this.getPixelColor(tile, tileX, tileY);
 
         // BG over obj priority
-        if (sprite.bgPriority && bgColorId > 0) {
+        if (sprite.bgPriority && this.bgColorId > 0) {
           continue;
         }
         // transparent pixel

@@ -402,6 +402,13 @@ class CPU {
   }
 
   read(param) {
+    /*
+     * d8  immediate 8-bit data
+     * d16 immediate 16-bit data
+     * a8  8-bit unsigned data + 0xff00
+     * a16 16-bit address
+     * s8  8-bit signed data
+     */
 
     switch (param) {
       case "a8":
@@ -414,11 +421,8 @@ class CPU {
       case "d8":
         return this.nextByte();
 
-      case "r8":
+      case "s8":
         return tcBin2Dec(this.nextByte());
-
-      case "(HL)":
-        return this.readByte(this.HL());
 
       default:
         throw new Error("Unknown operand: " + param);
@@ -1101,8 +1105,6 @@ class CPU {
   }
 
   ADDSP(n) {
-    let val = this.SP + n;
-
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("H");
@@ -1111,10 +1113,10 @@ class CPU {
     if (((this.SP & 0xf) + (n & 0xf)) & 0x10) {
       this.setFlag("H");
     }
-    if (val > 0xff) {
+    if (((this.SP & 0xff) + (n & 0xff)) & 0x100) { // TODO: Why does this work?
       this.setFlag("C");
     }
-    return val & 0xffff;
+    return (this.SP + n) & 0xffff;
   }
 
   // Subtraction
@@ -1234,8 +1236,6 @@ class CPU {
     this.code = code;
     this.cbcode = null;
 
-    // TODO: Eliminate giant switch statement
-
     switch(code) {
 
       // 0x00  NOP  length: 1  cycles: 4  flags: ----  group: control/misc
@@ -1320,19 +1320,19 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x20  JR NZ,r8  length: 2  cycles: 12,8  flags: ----  group: control/br
+      // 0x20  JR NZ,s8  length: 2  cycles: 12,8  flags: ----  group: control/br
       case 0x20:
-        this.cycles += this.JRNZ(this.read("r8"));
+        this.cycles += this.JRNZ(this.read("s8"));
         break;
 
-      // 0x28  JR Z,r8  length: 2  cycles: 12,8  flags: ----  group: control/br
+      // 0x28  JR Z,s8  length: 2  cycles: 12,8  flags: ----  group: control/br
       case 0x28:
-        this.cycles += this.JRZ(this.read("r8"));
+        this.cycles += this.JRZ(this.read("s8"));
         break;
 
-      // 0x30  JR NC,r8  length: 2  cycles: 12,8  flags: ----  group: control/br
+      // 0x30  JR NC,s8  length: 2  cycles: 12,8  flags: ----  group: control/br
       case 0x30:
-        this.cycles += this.JRNC(this.read("r8"));
+        this.cycles += this.JRNC(this.read("s8"));
         break;
 
       // 0x22  LD (HL+),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
@@ -1443,17 +1443,16 @@ class CPU {
         this.cycles += 12;
         break;
 
-      // 0xe8  ADD SP,r8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
+      // 0xe8  ADD SP,s8  length: 2  cycles: 16  flags: 00HC  group: x16/alu
       case 0xe8:
-        this.SP = this.ADDSP(this.read("r8"));
+        this.SP = this.ADDSP(this.read("s8"));
         this.cycles += 16;
         break;
 
       // 0xf1  POP AF  length: 1  cycles: 12  flags: ZNHC  group: x16/lsm
       case 0xf1:
-        // TODO: confirm correct behavior
         [this.A, this.F] = this.POP();
-        this.F &= 0xf0;
+        this.F &= 0xf0; // lower 4 bits are not used and should be cleared
         this.cycles += 12;
         break;
 
@@ -1475,9 +1474,9 @@ class CPU {
         this.cycles += 16;
         break;
 
-      // 0xf8  LD HL,SP+r8  length: 2  cycles: 12  flags: 00HC  group: x16/lsm
+      // 0xf8  LD HL,SP+s8  length: 2  cycles: 12  flags: 00HC  group: x16/lsm
       case 0xf8:
-        val = this.ADDSP(this.read("r8"));
+        val = this.ADDSP(this.read("s8"));
         this.H = val >> 8;
         this.L = val & 0xff;
         this.cycles += 12;
@@ -1578,9 +1577,9 @@ class CPU {
         this.cycles += 4;
         break;
 
-      // 0x18  JR r8  length: 2  cycles: 12  flags: ----  group: control/br
+      // 0x18  JR s8  length: 2  cycles: 12  flags: ----  group: control/br
       case 0x18:
-        this.cycles += this.JR(this.read("r8"));
+        this.cycles += this.JR(this.read("s8"));
         break;
 
       case 0xa0: // 0xa0  AND B  length: 1  cycles: 4  flags: Z010  group: x8/alu
@@ -2040,9 +2039,9 @@ class CPU {
         this.cycles += 12;
         break;
 
-      // 0x38  JR C,r8  length: 2  cycles: 12,8  flags: ----  group: control/br
+      // 0x38  JR C,s8  length: 2  cycles: 12,8  flags: ----  group: control/br
       case 0x38:
-        this.cycles += this.JRC(this.read("r8"));
+        this.cycles += this.JRC(this.read("s8"));
         break;
 
       // cb prefixes
@@ -2469,20 +2468,22 @@ class CPU {
   updateTimers() {
     // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
+    let timer = this.readByte(Constants.TIMA_REG);
+
     if (tac & 0b100) { // Check timer enabled
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-      this.timer += this.cycles / freq;
+      timer += Math.floor(this.cycles / freq);
 
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
-      if (this.timer > 0xff) {
-        this.timer = this.readByte(Constants.TMA_REG);
+      if (timer > 0xff) {
+        timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
       }
       else {
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
       }
       // Update TIMA w/new value
-      this.writeByte(Constants.TIMA_REG, this.timer & 0xff);
+      this.writeByte(Constants.TIMA_REG, timer);
     }
 
     // DIV: write to IO directly to avoid reset
@@ -2633,7 +2634,7 @@ class PPU {
           this.drawWindow(this.x, this.y);
         }
         if (this.LCDC & Constants.LCDC_OBJ_ENABLE) {
-          this.drawSprites(this.x, this.y, this.bgColorId);
+          this.drawSprites(this.x, this.y);
         }
       }
 
@@ -2821,7 +2822,7 @@ class PPU {
     return sprites;
   }
 
-  drawSprites(x, y, bgColorId=0) {
+  drawSprites(x, y) {
     this.spriteHeight = this.LCDC & Constants.LCDC_OBJ_SIZE ? 16 : 8;
 
     for (let n = 0; n < this.sprites.length; n++) {
@@ -2841,7 +2842,7 @@ class PPU {
         let colorId = this.getPixelColor(tile, tileX, tileY);
 
         // BG over obj priority
-        if (sprite.bgPriority && bgColorId > 0) {
+        if (sprite.bgPriority && this.bgColorId > 0) {
           continue;
         }
         // transparent pixel
