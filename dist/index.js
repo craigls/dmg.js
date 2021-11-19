@@ -335,7 +335,7 @@ class CPU {
     this.cycles = 0;
     this.IMEEnabled = false;
     this.haltMode = false;
-    this.timer = 0;
+    this.timerCycles = 0;
 
     this.flags = {
       Z: 128, // zero
@@ -2468,12 +2468,16 @@ class CPU {
   updateTimers() {
     // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
-    let timer = this.readByte(Constants.TIMA_REG);
 
     if (tac & 0b100) { // Check timer enabled
+      let timer = this.readByte(Constants.TIMA_REG);
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-      timer += Math.floor(this.cycles / freq);
 
+      this.timerCycles += this.cycles;
+      if (this.timerCycles >= freq) {
+        timer++;
+        this.timerCycles = 0;
+      }
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
       if (timer > 0xff) {
         timer = this.readByte(Constants.TMA_REG);
