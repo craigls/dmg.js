@@ -28,6 +28,7 @@ class DMG {
     this.frames = 0;
     this.cpu.reset();
     this.ppu.reset();
+    this.screen.reset();
     this.mmu.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html

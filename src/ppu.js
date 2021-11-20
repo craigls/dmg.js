@@ -101,23 +101,22 @@ class PPU {
     let statMode;
 
     this.cycles += cycles;
-
-    // Cache these register values so we're not constantly looking them up
-    this.LCDEnabled = this.LCDC & Constants.LCDC_ENABLE ? true : false;
     this.LCDC = this.readByte(Constants.LCDC_REG);
+    this.LCDEnabled = this.LCDC & Constants.LCDC_ENABLE ? true : false;
+
+    // LCD state changed to disabled
+    if (! this.LCDEnabled) {
+      this.writeByte(Constants.LY_REG, 0);
+      this.evalLYCLYInterrupt();
+      this.screen.reset();
+      return;
+    }
+
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
     this.scrollY = this.readByte(Constants.SCROLLY_REG);
     this.winX = this.readByte(Constants.WINX_REG) - 7; // winX = window position - 7 (hardware bug?)
     this.winY = this.readByte(Constants.WINY_REG);
     this.BGP = this.readByte(Constants.BGP_REG);
-
-    // LCD Disabled
-    if (! this.LCDEnabled) {
-      this.writeByte(Constants.LY_REG, 0);
-      this.evalLYCLYInterrupt();
-      // TODO: clear screen
-      return;
-    }
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {

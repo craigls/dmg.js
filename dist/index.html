@@ -9,6 +9,7 @@ canvas {
   image-rendering: -webkit-crisp-edges;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  background-color: #ccc;
 }
 </style>
 </head>
@@ -21,7 +22,7 @@ canvas {
 <input id="rom" type="file" name="rom" accept=".gb" onchange="loadRomFromFile(this.files[0])">
 </div>
 <div>
-<canvas id="vramviewer"></canvas>
+<!-- <canvas id="vramviewer"></canvas> -->
 </div>
 <script src="index.js"></script>
 </body>

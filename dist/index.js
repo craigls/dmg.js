@@ -173,6 +173,7 @@ class DMG {
     this.frames = 0;
     this.cpu.reset();
     this.ppu.reset();
+    this.screen.reset();
     this.mmu.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
@@ -2609,23 +2610,22 @@ class PPU {
     let statMode;
 
     this.cycles += cycles;
-
-    // Cache these register values so we're not constantly looking them up
-    this.LCDEnabled = this.LCDC & Constants.LCDC_ENABLE ? true : false;
     this.LCDC = this.readByte(Constants.LCDC_REG);
+    this.LCDEnabled = this.LCDC & Constants.LCDC_ENABLE ? true : false;
+
+    // LCD state changed to disabled
+    if (! this.LCDEnabled) {
+      this.writeByte(Constants.LY_REG, 0);
+      this.evalLYCLYInterrupt();
+      this.screen.reset();
+      return;
+    }
+
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
     this.scrollY = this.readByte(Constants.SCROLLY_REG);
     this.winX = this.readByte(Constants.WINX_REG) - 7; // winX = window position - 7 (hardware bug?)
     this.winY = this.readByte(Constants.WINY_REG);
     this.BGP = this.readByte(Constants.BGP_REG);
-
-    // LCD Disabled
-    if (! this.LCDEnabled) {
-      this.writeByte(Constants.LY_REG, 0);
-      this.evalLYCLYInterrupt();
-      // TODO: clear screen
-      return;
-    }
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
@@ -3124,6 +3124,12 @@ class LCDScreen {
   // Draws the contents of PPU's frame buffer to an HTML canvas
   update(imageData) {
     this.ctx.putImageData(imageData, 0, 0, 0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT)
+  }
+
+  // Clear the screen
+  reset() {
+    this.ctx.fillStyle = 'rgb(' + Constants.DEFAULT_PALETTE[0].join(',') + ')';
+    this.ctx.fillRect(0, 0, Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT);
   }
 }
 
