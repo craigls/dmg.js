@@ -257,7 +257,7 @@ class CPU {
   CALLZ(addr) {
     let cycles = 12;
     if (this.getFlag("Z")) {
-      return this.CALL(addr);
+      cycles = this.CALL(addr);
     }
     return cycles;
   }
@@ -266,7 +266,7 @@ class CPU {
   CALLNZ(addr) {
     let cycles = 12;
     if (! this.getFlag("Z")) {
-      return this.CALL(addr);
+      cycles = this.CALL(addr);
     }
     return cycles;
   }
@@ -275,7 +275,7 @@ class CPU {
   CALLC(addr) {
     let cycles = 12;
     if (this.getFlag("C")) {
-      return this.CALL(addr);
+      cycles = this.CALL(addr);
     }
     return cycles;
   }
@@ -284,7 +284,7 @@ class CPU {
   CALLNC(addr) {
     let cycles = 12;
     if (! this.getFlag("C")) {
-      return this.CALL(addr);
+      cycles = this.CALL(addr);
     }
     return cycles;
   }
