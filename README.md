@@ -27,6 +27,7 @@ Open dist/index.html in a browser, load a Game Boy ROM file (not included)
 ## Useful links
 
 - https://gbdev.io/pandocs
+- https://gbdev.gg8.se/
 - https://realboyemulator.wordpress.com/2013/01/03/a-look-at-the-game-boy-bootstrap-let-the-fun-begin/
 - https://mattbruv.github.io/gameboy-crust/
 - http://www.codeslinger.co.uk/pages/projects/gameboy.html
@@ -36,3 +37,4 @@ Open dist/index.html in a browser, load a Game Boy ROM file (not included)
 - https://www.youtube.com/watch?v=eZRzaGFWoz8
 - https://www.youtube.com/watch?v=HyzD8pNlpwI
 - https://github.com/retrio/gb-test-roms
+- https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html

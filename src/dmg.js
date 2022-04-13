@@ -12,9 +12,10 @@ const CONTROLS = {
 }
 
 class DMG {
-  constructor(cpu, ppu, mmu, screen, joypad, vramviewer) {
+  constructor(cpu, ppu, apu, mmu, screen, joypad, vramviewer) {
     this.cpu = cpu;
     this.ppu = ppu;
+    this.apu = apu;
     this.mmu = mmu;
     this.vramviewer = vramviewer;
     this.screen = screen;
@@ -30,6 +31,7 @@ class DMG {
     this.ppu.reset();
     this.screen.reset();
     this.mmu.reset();
+    this.apu.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
 
@@ -97,6 +99,7 @@ class DMG {
     while (total < this.cyclesPerFrame) {
       let cycles = this.cpu.update();
       this.ppu.update(cycles);
+      this.apu.update(cycles);
       total += cycles;
     }
     this.cycles += total;
@@ -141,8 +144,9 @@ window.createDMG = () => {
   let screen = new LCDScreen(screenElem);
   let ppu = new PPU(mmu, screen);
   let cpu = new CPU(mmu, ppu);
+  let apu = new APU(mmu);
   //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
-  return new DMG(cpu, ppu, mmu, screen, joypad);
+  return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 }
 
 window.loadRomFromFile = (file) => {
