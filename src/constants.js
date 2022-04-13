@@ -2,7 +2,7 @@
 class Constants {
 
   // Emulator timing settings
-  static CLOCK_SPEED = 4194305;
+  static CLOCK_SPEED = 4194304;
   static FRAMES_PER_SECOND = 60;
   static CYCLES_PER_FRAME = Constants.CLOCK_SPEED / Constants.FRAMES_PER_SECOND;
 
@@ -66,40 +66,6 @@ class Constants {
   static SCROLLX_REG = 0xff43;
   static WINX_REG = 0xff4b;
   static WINY_REG = 0xff4a;
-
-  // APU
-  // channel 1 (tone and sweep)
-  static NR10_REG = 0xff10; // sweep register (rw)
-  static NR11_REG = 0xff11; // sound length/wave pattern duty (rw)
-  static NR12_REG = 0xff12; // volume env (rw)
-  static NR13_REG = 0xff13; // freq lo (w)
-  static NR14_REG = 0xff14; // freq hi (rw)
-
-  // channel 2 (tone)
-  static NR21_REG = 0xff16; // sound length/wave pattern duty (rw)
-  static NR22_REG = 0xff17; // volume env (rw)
-  static NR23_REG = 0xff18; // freq lo data (w)
-  static NR24_REG = 0xff19; // freq hi data (w)
-
-  // channel 3 (wave)
-  // wave pattern ram is at ff30-ff3f
-  static NR30_REG = 0xff1a; // sound on/off (rw)
-  static NR31_REG = 0xff1b; // sound length (w)
-  static NR32_REG = 0xff1c; // select output level (rw)
-  static NR33_REG = 0xff1d; // freq lo data (rw)
-  static NR34_REG = 0xff1e; // freq hi data (rw)
-
-  // channel 4 (noise)
-  static NR41_REG = 0xff20; // sound length (w)
-  static NR42_REG = 0xff21; // volume env (rw)
-  static NR43_REG = 0xff22; // polynomial counter (rw)
-  static NR44_REG = 0xff23; // counter/consecutive; initial (rw)
-
-  // sound control registers
-  static NR50_REG = 0xff24; // channel control / on-off / volume (r/w)
-  static NR51_REG = 0xff25; // sound output terminal (rw)
-  static NR52_REG = 0xff26; // sound on/off
-  // end APU
 
   // Screen
   static VIEWPORT_WIDTH = 160;
