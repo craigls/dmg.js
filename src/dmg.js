@@ -143,8 +143,8 @@ window.createDMG = () => {
   let mmu = new MMU(joypad);
   let screen = new LCDScreen(screenElem);
   let ppu = new PPU(mmu, screen);
-  let cpu = new CPU(mmu, ppu);
   let apu = new APU(mmu);
+  let cpu = new CPU(mmu, apu);
   //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 }
