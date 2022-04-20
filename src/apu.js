@@ -46,8 +46,8 @@ class APU {
     this.audioQueue = null;
     this.nextAudioTime = 0
     this.currentFrame = 0;
-    this.cycles = 0
-    this.enabled = false;
+    this.cycles = 0;
+    this.enabled = true;
   }
 
   reset() {
@@ -78,34 +78,6 @@ class APU {
 
     this.channels.push(channel1);
     this.channels.push(channel2);
-
-    this.lengthSequencer = new Sequencer({
-      rate: 256,
-      steps: [1, 0, 1, 0, 1, 0, 0, 1],
-      timers: [
-        this.channels[0].lengthCounter,
-        this.channels[1].lengthCounter,
-      ],
-    });
-
-    this.volumeSequencer = new Sequencer({
-      rate: 64,
-      steps: [0, 0, 1, 0, 0, 0, 1, 0],
-      timers: [
-        this.channels[0].envelopeCounter,
-        this.channels[1].envelopeCounter,
-      ]
-    });
-
-    /*
-    this.sweepSequencer = new Sequencer({
-      rate: 128,
-      steps: [0, 0, 0, 0, 0, 0, 0, 1],
-      timers: [
-        //this.channel1.sweepCounter,
-      ]
-    });
-    */
   }
 
   processAudioQueue() {
@@ -130,26 +102,20 @@ class APU {
   }
 
   update(cycles) {
-    if (! this.enabled) {
-      return;
-    }
-
-    // Check each channel for trigger events
-    for (let channel of this.channels) {
-      if (! channel.enabled && ((this.mmu.readByte(channel.r4) & 0x40) !== 0))  {
-        channel.trigger();
-      }
-    }
-
     while (cycles--) {
-      this.cycles++;
-      this.channels[0].frequencyTimer.step();
-      this.channels[1].frequencyTimer.step();
+      this.channels[0].clockFrequency();
+      this.channels[1].clockFrequency();
 
+      // Advance frame sequencer
       if (this.cycles % APU.frameSequencerRate === 0) {
-        this.lengthSequencer.step()
-        this.volumeSequencer.step()
-        //this.sweepSequencer.step()
+        if (this.cycles % (8192 * 2) === 0) {
+          this.channels[0].clockLength();
+          this.channels[1].clockLength();
+        }
+        if (this.cycles % (8192 * 8) === 0) {
+          this.channels[0].clockVolume();
+          this.channels[1].clockVolume();
+        }
       }
       // Sum audio from each channel, write to buffer
       if (this.cycles % APU.samplingInterval === 0) {
@@ -167,75 +133,170 @@ class APU {
         }
       }
       this.processAudioQueue();
+      this.cycles++;
+    }
+  }
+
+  updateLengthCounter(loc, value) {
+    let channel;
+    switch (loc) {
+      case APU.rNR11:
+        channel = this.channels[0];
+        break;
+      case APU.rNR21:
+        channel = this.channels[1];
+        break;
+      case APU.rNR31:
+        channel = this.channels[2];
+        break;
+      case APU.rNR41:
+        channel = this.channels[3];
+        break;
+    }
+    if (channel) {
+      channel.lengthCounter = channel.maxLength - (value & 0x3f);
+    }
+  }
+
+  triggerEvent(loc, value) {
+    let channel;
+    switch (loc) {
+      case APU.rNR14:
+        channel = this.channels[0];
+        break;
+      case APU.rNR24:
+        channel = this.channels[1];
+        break;
+      case APU.rNR34:
+        channel = this.channels[2];
+        break;
+      case APU.rNR44:
+        channel = this.channels[3];
+        break;
+    }
+    if (channel) {
+      channel.trigger();
     }
   }
 }
 
 window.APU = APU;
 
-// Counter that executes callback when count is zero
-class Counter {
-  constructor(callback) {
-    this.value = 0;
-    this.callback = callback;
+class SquareWaveChannel {
+  static dutyCyclePatterns = {
+    0: 0b00000001, // 12.5%
+    1: 0b10000001, // 25%
+    2: 0b10000111, // 50%
+    3: 0b01111110, // 75%
+  };
+
+  constructor(params) {
+    // Copy register names, etc for easy lookup
+    Object.assign(this, params);
+    this.mmu = params.mmu;
+    this.volume = 0;
+    this.wavePos = 0;
+    this.maxLength = 64;
+    this.frequencyTimer = 0;
+    this.lengthCounter = 0;
+    this.volumeTimer = 0;
     this.enabled = true;
   }
-  get() {
-    return this.value;
+
+  getAmplitude() {
+    let dutyN = this.mmu.readByte(this.r1) >> 6;
+    //let dutyCycle = SquareWaveChannel.dutyCyclePatterns[dutyN] & (1 << (7 - this.wavePos));
+    let dutyCycle = SquareWaveChannel.dutyCyclePatterns[dutyN] & (1 << this.wavePos);
+    return dutyCycle * this.volume;
   }
-  step() {
-    if (this.value === 0) {
+
+  trigger() {
+    // If DAC is enabled, update channel status to ON
+    //if ((mmu.readByte(APU.rNR52) & 0x80) !== 0) {
+    // Set internal status to ON
+    this.enabled = true;
+
+    // Set channel status flag to ON
+    let stats = this.mmu.readByte(APU.rNR52);
+    this.mmu.writeByte(APU.rNR52, stats & (1 << this.channelId));
+
+    // Reset the length counter if expired
+    if (this.lengthCounter === 0) {
+      this.lengthCounter = this.maxLength;
+    }
+
+    // Reset envelope counter to period
+    this.volumeTimer = this.mmu.readByte(this.r2) & 0x7;
+
+    // Set channel volume to initial envelope volume and update frequency
+    this.volume = this.mmu.readByte(this.r2) & 0xf0;
+
+    let lo = this.mmu.readByte(this.r3);
+    let hi = this.mmu.readByte(this.r4) & 0x7;
+    this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
+  }
+
+  clockFrequency() {
+    this.frequencyTimer--;
+    if (this.frequencyTimer === 0) {
+      let lo = this.mmu.readByte(this.r3);
+      let hi = this.mmu.readByte(this.r4) & 0x7;
+      this.wavePos = ++this.wavePos % 8;
+      this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
+    }
+  }
+
+  clockLength() {
+    if (this.mmu.readByte(this.r4) & 0x40 === 0) {
       return;
     }
-    this.value--;
-    if (this.value === 0) {
-      this.callback(this);
+    else if (this.lengthCounter === 0) {
+      return;
+    }
+    this.lengthCounter--;
+
+    // Set channel status flag to zero (disabled)
+    if (this.lengthCounter === 0) {
+      let flags = this.mmu.readByte(APU.rNR52);
+      this.mmu.writeByte(APU.rNR52, flags & ~(1 << this.channelId));
+
+      // Disable channel
+      this.enabled = false;
     }
   }
-  set(value) {
-    this.value = value;
-  }
-}
 
-function createEnvelopeCounter(channel) {
-  let mmu = channel.mmu;
-  let counter = new Counter((timer) => {
-    let value = mmu.readByte(this.r2);
-    let volume = value & 0xf;
-    let direction = value & 0x8;
+  clockVolume() {
+    if (this.volumeTimer > 0) {
+      this.volumeTimer--;
+    }
+    else {
+      return;
+    }
+    let value = this.mmu.readByte(this.r2);
+    let volume = value >> 4;
+    let direction = (value & 0x8) >> 3;
     let period = value & 0x7;
 
-    if (period) {
-      volume += direction ? 1 : -1;
+    if (period === 0) {
+      return;
     }
+    else if (this.frequencyTimer === 0) {
+      volume = 0;
+    }
+    volume += direction ? 1 : -1;
+
     if (volume >= 0 && volume <= 0xf) {
-      channel.mmu.writeByte(value | volume);
+      this.mmu.writeByte(this.r2, value | volume);
     }
-  });
-  return counter;
-}
-
-function createLengthCounter(channel) {
-  let mmu = channel.mmu;
-  let counter = new Counter((counter) => {
-    // Disable the channel if bit 6 of NRx4 is set
-    if ((mmu.readByte(channel.r4) & 0x40) !== 0) {
-      channel.enabled = false;
+    else {
+      this.volumeTimer = 0;
     }
-    // Reset length
-    let length = channel.mmu.readByte(channel.r1) & 0xf;
-    counter.set(channel.maxLength - length);
-  });
-  return counter;
-}
+  }
 
-function createSweepCounter(channel) {
-  // TODO: Probably wrong
-  let mmu = channel.mmu;
-
-  let counter = new Counter((timer) => {
-    let value = mmu.readByte(channel.r1);
-    let freq = mmu.readByte(channel.r1);
+  clockSweep() {
+    // TODO: Probably wrong
+    let value = this.mmu.readByte(this.r1);
+    let freq = this.mmu.readByte(this.r1);
     let time = value & 0b1110000;
     let direction = value & 0b1000;
     let shift = value & 0b111;
@@ -251,84 +312,6 @@ function createSweepCounter(channel) {
     else {
       freq = freq - freq / 2 ^ shift;
     }
-    channel.writeByte(channel.r3, freq);
-  });
-}
-
-class SquareWaveChannel {
-  static dutyCyclePatterns = {
-    0: 0b01111111, // 12.5%
-    1: 0b00111111, // 25%
-    2: 0b00001111, // 50%
-    3: 0b00000011, // 75%
-  };
-  static maxLength = 64;
-
-  constructor(params) {
-    // Copy register names, etc for easy lookup
-    Object.assign(this, params);
-
-    this.volume = 1;
-    this.wavePos = 0;
-    this.frequencyTimer = new Counter(this.setFrequency.bind(this));
-    this.lengthCounter = createLengthCounter(this);
-    this.envelopeCounter = createEnvelopeCounter(this);
-    this.setFrequency();
-  }
-
-  setFrequency() {
-    let lo = this.mmu.readByte(this.r3);
-    let hi = this.mmu.readByte(this.r4) & 0x7;
-    this.wavePos = ++this.wavePos % 8;
-    this.frequencyTimer.set((2048 - uint16(hi, lo)) * 4);
-  }
-
-  getAmplitude() {
-    let n = this.mmu.readByte(this.r1) >> 6;
-    return this.volume * (SquareWaveChannel.dutyCyclePatterns[n] & (1 << (7 - this.wavePos)));
-  }
-
-  trigger() {
-    this.enabled = true;
-
-    if (this.lengthCounter.get() === 0) {
-      this.lengthCounter.set(this.maxLength);
-    }
-
-    // Reset envelope counter to period
-    let period = this.mmu.readByte(this.r2) & 0x7;
-    this.envelopeCounter.set(period);
-
-    // Set channel volume to initial envelope volume, update frequency
-    this.volume = this.mmu.readByte(this.r2) & 0xf0;
-    this.setFrequency();
-  }
-}
-
-/*
- * Sequencer used for clocking volume, length and sweep modulations
- * ie "frame sequencer" referenced in gb dev docs
- */
-class Sequencer {
-  constructor(params) {
-    this.rate = params.rate;
-    this.steps = params.steps;
-    this.timers = params.timers;
-    this.cycles = 0;
-    this.counter = 0;
-  }
-
-  step() {
-    if (this.cycles % this.rate !== 0) {
-      return;
-    }
-    this.counter++;
-
-    // When current step set to ON advance the timers
-    if (this.steps[this.counter] === 1) {
-      for (let timer of this.timers) {
-        timer.step();
-      }
-    }
+    this.writeByte(this.r3, freq);
   }
 }

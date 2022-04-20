@@ -1,7 +1,8 @@
 // CPU
 class CPU {
-  constructor(mmu) {
+  constructor(mmu, apu) {
     this.mmu = mmu;
+    this.apu = apu;
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -66,6 +67,31 @@ class CPU {
   }
 
   writeByte(loc, value) {
+    if (loc >= APU.rNR11 && loc <= APU.rNR41) {
+      // Intercept writes to certain APU registers
+      switch (loc) {
+        case APU.rNR11:
+        case APU.rNR21:
+        case APU.rNR31:
+        case APU.rNR41:
+          // Length counter updated
+          if (value & 0xff) {
+            this.apu.updateLengthCounter(loc, value)
+          }
+          break;
+        case APU.rNR14:
+        case APU.rNR24:
+        case APU.rNR34:
+        case APU.rNR44:
+          // Sound is triggered
+          if (value & 0x80) {
+            this.apu.triggerEvent(loc, value);
+          }
+          break;
+        default:
+          // do nothing
+      }
+    }
     return this.mmu.writeByte(loc, value);
   }
 
