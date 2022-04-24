@@ -70,15 +70,6 @@ class CPU {
     if (loc >= APU.rNR11 && loc <= APU.rNR41) {
       // Intercept writes to certain APU registers
       switch (loc) {
-        case APU.rNR11:
-        case APU.rNR21:
-        case APU.rNR31:
-        case APU.rNR41:
-          // Length counter updated
-          if (value & 0xff) {
-            this.apu.updateLengthCounter(loc, value)
-          }
-          break;
         case APU.rNR14:
         case APU.rNR24:
         case APU.rNR34:

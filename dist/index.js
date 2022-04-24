@@ -391,15 +391,6 @@ class CPU {
     if (loc >= APU.rNR11 && loc <= APU.rNR41) {
       // Intercept writes to certain APU registers
       switch (loc) {
-        case APU.rNR11:
-        case APU.rNR21:
-        case APU.rNR31:
-        case APU.rNR41:
-          // Length counter updated
-          if (value & 0xff) {
-            this.apu.updateLengthCounter(loc, value)
-          }
-          break;
         case APU.rNR14:
         case APU.rNR24:
         case APU.rNR34:
@@ -3178,8 +3169,6 @@ class APU {
   static rNR52 = 0xff26; // sound on/off
 
   static frameCount = 1024;
-  static sampleRate = 48000;
-  static samplingInterval = Math.floor(Constants.CLOCK_SPEED / APU.sampleRate);
   static frameSequencerRate = 8192;
   static lengthSequence =   [1, 0, 1, 0, 1, 0, 1, 0];
   static envelopeSequence = [0, 0, 0, 0, 0, 0, 0, 1];
@@ -3195,7 +3184,8 @@ class APU {
     this.nextAudioTime = 0
     this.currentFrame = 0;
     this.cycles = 0;
-    this.disabled = [];
+    this.sampleRate = this.audioContext.sampleRate;
+    this.samplingInterval = Math.floor(Constants.CLOCK_SPEED / this.sampleRate);
   }
 
   reset() {
@@ -3234,9 +3224,10 @@ class APU {
     while (this.audioQueue.length) {
       // HACK: Sample playback is lagging behind so fast-forward
       if (this.audioContext.currentTime > this.nextAudioTime) {
+        console.log("audio lag!");
         this.nextAudioTime = this.audioContext.currentTime;
       }
-      let buffer = this.audioContext.createBuffer(2, APU.frameCount, APU.sampleRate);
+      let buffer = this.audioContext.createBuffer(2, APU.frameCount, this.sampleRate);
       buffer.getChannelData(0).set(this.audioQueue.shift());
       buffer.getChannelData(1).set(this.audioQueue.shift());
 
@@ -3245,7 +3236,6 @@ class APU {
       gain.connect(this.audioContext.destination);
       gain.gain.value = 0.00001;
       source.buffer = buffer;
-      //source.connect(this.audioContext.destination);
       source.connect(gain);
       source.start(this.nextAudioTime);
       this.nextAudioTime += buffer.duration;
@@ -3278,7 +3268,7 @@ class APU {
         */
       }
       // Sum audio from each channel, write to buffer
-      if (this.cycles % APU.samplingInterval === 0) {
+      if (this.cycles % this.samplingInterval === 0) {
         let volumeLeft = 0;
         let volumeRight = 0;
         // Get values of volume control, panning and channel status registers
@@ -3304,11 +3294,11 @@ class APU {
         }
         // Apply master volume settings.
         // +1 is added to volume so channels aren't muted
-        volumeLeft *= ((control >> 4) & 0x7) + 1; // SO2
-        volumeRight *= ((control & 0x7) + 1) + 1; // SO1
+        //volumeLeft *= ((control >> 4) & 0x7); // SO2
+        //volumeRight *= (control & 0x7); // SO1
 
-        this.sampleLeft[this.currentFrame] = volumeLeft;
-        this.sampleRight[this.currentFrame] = volumeRight;
+        this.sampleLeft[this.currentFrame] = volumeLeft / 2;
+        this.sampleRight[this.currentFrame] = volumeRight / 2;
 
         // Push samples to audio queue when buffer is full
         if (this.currentFrame == APU.frameCount - 1) {
@@ -3324,27 +3314,6 @@ class APU {
       }
       this.processAudioQueue();
       this.cycles++;
-    }
-  }
-
-  updateLengthCounter(loc, value) {
-    let channel;
-    switch (loc) {
-      case APU.rNR11:
-        channel = this.channels[0];
-        break;
-      case APU.rNR21:
-        channel = this.channels[1];
-        break;
-      case APU.rNR31:
-        channel = this.channels[2];
-        break;
-      case APU.rNR41:
-        channel = this.channels[3];
-        break;
-    }
-    if (channel) {
-      channel.lengthCounter = channel.maxLength - (value & 0x3f);
     }
   }
 
@@ -3400,10 +3369,7 @@ class SquareWaveChannel {
     return 0;
   }
 
-  trigger(channel) {
-    // If DAC is enabled, update channel status to ON
-    //if ((mmu.readByte(APU.rNR52) & 0x80) !== 0) {
-    // Set internal status to ON
+  trigger() {
     this.enabled = true;
 
     // Set channel status flag to ON
@@ -3412,7 +3378,7 @@ class SquareWaveChannel {
 
     // Reset the length counter if expired
     if (this.lengthCounter === 0) {
-      this.lengthCounter = this.maxLength;
+      this.lengthCounter = this.maxLength - (this.mmu.readByte(this.r1) & 0x3f);
     }
 
     // Reset envelope counter to period
@@ -3428,6 +3394,11 @@ class SquareWaveChannel {
     let lo = this.mmu.readByte(this.r3);
     let hi = this.mmu.readByte(this.r4) & 0x7;
     this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
+
+    // If DAC is off then disable channel
+    if ((this.mmu.readByte(APU.rNR52) & 0x80) === 0) {
+      this.enabled = false;
+    }
   }
 
   clockFrequency() {
@@ -3438,12 +3409,16 @@ class SquareWaveChannel {
     if (this.frequencyTimer === 0) {
       let lo = this.mmu.readByte(this.r3);
       let hi = this.mmu.readByte(this.r4) & 0x7;
-      this.wavePos = ++this.wavePos % 8;
+      this.wavePos = (this.wavePos + 1) % 8;
       this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
     }
   }
 
   clockLength() {
+    // Length disabled
+    if ((this.mmu.readByte(this.r4) & 0x40) === 0) {
+      return;
+    }
     if (this.lengthCounter === 0) {
       return;
     }
@@ -3455,8 +3430,8 @@ class SquareWaveChannel {
     // Disable channel if length enabled (NRx4 bit 6 is set)
     //if ((this.mmu.readByte(this.r4) & 0x40) !== 0) {
       // Set channel status flag to zero (disabled)
-      let statuses = this.mmu.readByte(APU.rNR52);
-      this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
+      //let statuses = this.mmu.readByte(APU.rNR52);
+      //this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
 
       // Disable channel
       this.enabled = false;
