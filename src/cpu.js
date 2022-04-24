@@ -83,7 +83,7 @@ class CPU {
         case APU.rNR24:
         case APU.rNR34:
         case APU.rNR44:
-          // Sound is triggered
+          // Sound is triggered when bit 7 set
           if (value & 0x80) {
             this.apu.triggerEvent(loc, value);
           }
