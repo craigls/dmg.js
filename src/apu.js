@@ -99,7 +99,7 @@ class APU {
       let source = this.audioContext.createBufferSource();
       let gain = this.audioContext.createGain();
       gain.connect(this.audioContext.destination);
-      gain.gain.value = 0.00001;
+      gain.gain.value = 0.0001;
       source.buffer = buffer;
       source.connect(gain);
       source.start(this.nextAudioTime);
@@ -223,6 +223,7 @@ class SquareWaveChannel {
     this.lengthCounter = 0;
     this.envelopeTimer = 0;
     this.enabled = true;
+    this.lengthEnabled = false;
   }
 
   getAmplitude() {
@@ -241,7 +242,9 @@ class SquareWaveChannel {
     let statuses = this.mmu.readByte(APU.rNR52);
     this.mmu.writeByte(APU.rNR52, statuses | (1 << this.channelId));
 
+    // Set length enabled flag
     // Reset the length counter if expired
+    this.lengthEnabled = true;
     if (this.lengthCounter === 0) {
       this.lengthCounter = this.maxLength - (this.mmu.readByte(this.r1) & 0x3f);
     }
@@ -255,10 +258,15 @@ class SquareWaveChannel {
     this.volume = value & 0xf0;
     this.volumeTimer = value & 0x7;
 
-    // Update frequency timer to period
-    let lo = this.mmu.readByte(this.r3);
-    let hi = this.mmu.readByte(this.r4) & 0x7;
-    this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
+    // Update frequency timer
+    let freq = 0;
+    if ((this.mmu.readByte(this.r4) & 0x40) !== 0) {
+      freq = uint16(
+        this.mmu.readByte(this.r4) & 0x7,
+        this.mmu.readByte(this.r3)
+      );
+    }
+    this.frequencyTimer = (2048 - freq) * 4;
 
     // If DAC is off then disable channel
     if ((this.mmu.readByte(APU.rNR52) & 0x80) === 0) {
@@ -272,16 +280,18 @@ class SquareWaveChannel {
     }
     this.frequencyTimer--;
     if (this.frequencyTimer === 0) {
-      let lo = this.mmu.readByte(this.r3);
-      let hi = this.mmu.readByte(this.r4) & 0x7;
+      let freq = uint16(
+        this.mmu.readByte(this.r4) & 0x7,
+        this.mmu.readByte(this.r3)
+      );
       this.wavePos = (this.wavePos + 1) % 8;
-      this.frequencyTimer = (2048 - uint16(hi, lo)) * 4;
+      this.frequencyTimer = (2048 - freq) * 4;
     }
   }
 
   clockLength() {
     // Length disabled
-    if ((this.mmu.readByte(this.r4) & 0x40) === 0) {
+    if (! this.lengthEnabled) {
       return;
     }
     if (this.lengthCounter === 0) {
@@ -300,6 +310,7 @@ class SquareWaveChannel {
 
       // Disable channel
       this.enabled = false;
+      this.wavePos = 0;
     //}
   }
 
