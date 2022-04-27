@@ -51,16 +51,8 @@ class APU {
     this.cycles = 0;
     this.sampleRate = this.audioContext.sampleRate;
     this.samplingInterval = Math.floor(Constants.CLOCK_SPEED / this.sampleRate);
-  }
 
-  reset() {
-    this.cycles = 0;
-    this.currentFrame = 0;
-    this.audioQueue = [];
-    this.nextAudioTime = 0;
-    this.channels = [];
-
-    let channel1 = new SquareWaveChannel({
+    this.square1 = new SquareChannel({
       channelId: 0,
       r0: APU.rNR10,
       r1: APU.rNR11,
@@ -70,7 +62,7 @@ class APU {
       mmu: this.mmu,
     });
 
-    let channel2 = new SquareWaveChannel({
+    this.square2 = new SquareChannel({
       channelId: 1,
       r1: APU.rNR21,
       r2: APU.rNR22,
@@ -79,8 +71,15 @@ class APU {
       mmu: this.mmu,
     });
 
-    this.channels.push(channel1);
-    this.channels.push(channel2);
+    this.channels.push(this.square1);
+    this.channels.push(this.square2);
+  }
+
+  reset() {
+    this.cycles = 0;
+    this.currentFrame = 0;
+    this.audioQueue = [];
+    this.nextAudioTime = 0;
   }
 
   processAudioQueue() {
@@ -99,7 +98,7 @@ class APU {
       let source = this.audioContext.createBufferSource();
       let gain = this.audioContext.createGain();
       gain.connect(this.audioContext.destination);
-      gain.gain.value = 0.00001;
+      gain.gain.value = 0.0001;
       source.buffer = buffer;
       source.connect(gain);
       source.start(this.nextAudioTime);
@@ -109,8 +108,8 @@ class APU {
 
   update(cycles) {
     while (cycles--) {
-      this.channels[0].clockFrequency();
-      this.channels[1].clockFrequency();
+      this.square1.clockFrequency();
+      this.square2.clockFrequency();
 
       // Advance frame sequencer
       if (this.cycles % APU.frameSequencerRate === 0) {
@@ -118,15 +117,15 @@ class APU {
         // Check if the active step is 1 (ON)
         // clock sequencer for each channel
         if (APU.lengthSequence[step] === 1) {
-          this.channels[0].clockLength();
-          this.channels[1].clockLength();
+          this.square1.clockLength();
+          this.square2.clockLength();
         }
         if (APU.envelopeSequence[step] === 1) {
-          this.channels[0].clockEnvelope();
-          this.channels[1].clockEnvelope();
+          this.square1.clockEnvelope();
+          this.square2.clockEnvelope();
         }
         if (APU.sweepSequence[step] === 1) {
-          this.channels[0].clockSweep();
+          this.square1.clockSweep();
         }
       }
       // Sum audio from each channel, write to buffer
@@ -180,29 +179,30 @@ class APU {
     }
   }
 
-  triggerEvent(loc, value) {
+  writeRegister(loc, value) {
+    // Intercept writes to NRx4 register, route to correct channel
+    let channel;
     switch (loc) {
       case APU.rNR14:
-        this.channels[0].trigger();
+        this.square1.writeRegister(loc, value);
         break;
       case APU.rNR24:
-        this.channels[1].trigger();
+        this.square2.writeRegister(loc, value);
         break;
       case APU.rNR34:
-        //this.channels[2].trigger();
         break;
       case APU.rNR44:
-        //this.channels[3].trigger();
         break;
       default:
-        throw Error("Invalid trigger event: " + loc);
+        // Do nothing
+        break;
     }
   }
 }
 
 window.APU = APU;
 
-class SquareWaveChannel {
+class SquareChannel {
   static dutyCyclePatterns = {
     0: 0b00000001, // 12.5%
     1: 0b10000001, // 25%
@@ -227,10 +227,17 @@ class SquareWaveChannel {
     this.enabled = true;
   }
 
+  writeRegister(loc, value) {
+    this.lengthEnabled = (value & 0x40) !== 0;
+    if (value & 0x80) {
+      this.trigger();
+    }
+  }
+
   getAmplitude() {
     if (this.enabled) {
       let dutyN = this.mmu.readByte(this.r1) >> 6;
-      let dutyCycle = SquareWaveChannel.dutyCyclePatterns[dutyN] & (1 << this.wavePos);
+      let dutyCycle = SquareChannel.dutyCyclePatterns[dutyN] & (1 << this.wavePos);
       return dutyCycle * this.volume;
     }
     return 0;
@@ -245,7 +252,6 @@ class SquareWaveChannel {
 
     // Set length enabled flag
     // Reset the length counter if expired
-    this.lengthEnabled = true;
     if (this.lengthCounter === 0) {
       this.lengthCounter = this.maxLength - (this.mmu.readByte(this.r1) & 0x3f);
     }
@@ -259,6 +265,7 @@ class SquareWaveChannel {
     // Update frequency timer
     // Use contents of NRx3/NRx4 if bit 6 of NRx4 set
     let frequency = 0;
+
     if ((this.mmu.readByte(this.r4) & 0x40) !== 0) {
       frequency = uint16(
         this.mmu.readByte(this.r4) & 0x7,
@@ -309,7 +316,7 @@ class SquareWaveChannel {
 
   clockLength() {
     //if (this.lengthEnabled && this.lengthCounter > 0) { // Doesn't seem to work. Why?
-    if (this.lengthEnabled) {
+    if (this.lengthEnabled && this.lengthCounter > 0) {
       this.lengthCounter--;
 
       if (this.lengthCounter === 0) {
@@ -381,6 +388,8 @@ class SquareWaveChannel {
     }
     // If overflow disable square 1 channel
     if (this.sweepFrequency + frequency > 2047) {
+        let statuses = this.mmu.readByte(APU.rNR52);
+        this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
         this.enabled = false;
     }
     return this.sweepFrequency + frequency;

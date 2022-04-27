@@ -119,15 +119,6 @@ class DMG {
     }
     if (this.started) {
       this.joypad.buttonPressed(button, state);
-
-      // Request joypad interrupt on button press (state = true)
-      let ifreg = this.mmu.readByte(Constants.IF_REG);
-      if (state) {
-        this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
-      }
-      else {
-        this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
-      }
     }
   }
 }
@@ -139,12 +130,12 @@ window.createDMG = () => {
   let screenElem = document.getElementById('screen');
   let consoleElem = document.getElementById('console');
   let vvElem = document.getElementById('vramviewer');
-  let joypad = new Joypad();
-  let mmu = new MMU(joypad);
+  let mmu = new MMU();
+  let joypad = new Joypad(mmu);
   let screen = new LCDScreen(screenElem);
   let ppu = new PPU(mmu, screen);
   let apu = new APU(mmu);
-  let cpu = new CPU(mmu, apu);
+  let cpu = new CPU(mmu, apu, joypad);
   //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 }

@@ -28,7 +28,6 @@ class MMU {
     this.oam = null;
     this.io = null
     this.ie = null;
-    this.joypad = joypad;
     this.mbcType = null;
     this.bankNum1 = null;
     this.bankNum2 = null;
@@ -78,13 +77,8 @@ class MMU {
   }
 
   readByte(loc) {
-    // Route to joypad
-    if (loc == Constants.JOYP_REG) {
-      return this.joypad.read();
-    }
-
     // ROM 1
-    else if (loc >= 0x0000 && loc <= 0x3fff) {
+    if (loc >= 0x0000 && loc <= 0x3fff) {
       return this.rom1[loc];
     }
 
@@ -145,13 +139,8 @@ class MMU {
     // Note: Ordering of if/else blocks matters here
     let cycles = 0;
 
-    // Selects joypad buttons to read from (dpad or action button)
-    if (loc == Constants.JOYP_REG) {
-      this.joypad.write(value);
-    }
-
     // Reset DIV register
-    else if (loc == Constants.DIV_REG) {
+    if (loc == Constants.DIV_REG) {
       this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
     }
 

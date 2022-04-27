@@ -1,10 +1,11 @@
 // Joypad Controller
 class Joypad {
-  constructor() {
+  constructor(mmu) {
     // store dpad and action button values in array
     // 0xf = no buttons pressed
     this.buttons = [0xf, 0xf];
     this.select = 0; // Used to switch between dpad/action buttons
+    this.mmu = mmu;
   }
 
   // Register a button event (0 = pressed)
@@ -12,6 +13,15 @@ class Joypad {
     let [sel, bit] = Constants.JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
     //console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
+
+    // Request joypad interrupt on button press (state = true)
+    let ifreg = this.mmu.readByte(Constants.IF_REG);
+    if (state) {
+      this.mmu.writeByte(Constants.IF_REG, ifreg | Constants.IF_JOYPAD);
+    }
+    else {
+      this.mmu.writeByte(Constants.IF_REG, ifreg & ~Constants.IF_JOYPAD);
+    }
   }
 
   // Switch between reading directional/action buttons

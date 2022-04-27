@@ -1,8 +1,9 @@
 // CPU
 class CPU {
-  constructor(mmu, apu) {
+  constructor(mmu, apu, joypad) {
     this.mmu = mmu;
     this.apu = apu;
+    this.joypad = joypad;
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -63,25 +64,22 @@ class CPU {
   }
 
   readByte(loc) {
+    // Route to joypad
+    if (loc == Constants.JOYP_REG) {
+      return this.joypad.read();
+    }
     return this.mmu.readByte(loc);
   }
 
   writeByte(loc, value) {
+
+    // Intercept writes to NRx4 register, route to correct channel
     if (loc >= APU.rNR11 && loc <= APU.rNR41) {
-      // Intercept writes to certain APU registers
-      switch (loc) {
-        case APU.rNR14:
-        case APU.rNR24:
-        case APU.rNR34:
-        case APU.rNR44:
-          // Sound is triggered when bit 7 set
-          if (value & 0x80) {
-            this.apu.triggerEvent(loc, value);
-          }
-          break;
-        default:
-          // do nothing
-      }
+      this.apu.writeRegister(loc, value);
+    }
+    // Selects joypad buttons to read from (dpad or action button)
+    if (loc == Constants.JOYP_REG) {
+      this.joypad.write(value);
     }
     return this.mmu.writeByte(loc, value);
   }
