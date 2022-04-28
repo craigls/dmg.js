@@ -315,6 +315,7 @@ class SquareChannel {
   }
 
   clockLength() {
+    if (this.lengthEnabled && this.lengthCounter > 0) {
       this.lengthCounter--;
 
       if (this.lengthCounter === 0) {
