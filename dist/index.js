@@ -384,7 +384,6 @@ class CPU {
   }
 
   writeByte(loc, value) {
-
     // Intercept writes to NRx4 register, route to correct channel
     if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       this.apu.writeRegister(loc, value);
@@ -3184,6 +3183,22 @@ class APU {
       mmu: this.mmu,
     });
 
+    this.wave = new DummyChannel({
+      channelId: 2,
+      r1: APU.rNR31,
+      r2: APU.rNR32,
+      r3: APU.rNR33,
+      r4: APU.rNR34,
+    });
+
+    this.noise = new DummyChannel({
+      channelId: 3,
+      r1: APU.rNR41,
+      r2: APU.rNR42,
+      r3: APU.rNR43,
+      r4: APU.rNR44,
+    });
+
     this.channels.push(this.square1);
     this.channels.push(this.square2);
   }
@@ -3293,27 +3308,39 @@ class APU {
   }
 
   writeRegister(loc, value) {
-    // Intercept writes to NRx4 register, route to correct channel
-    let channel;
+    // Route NRxx writes to correct channel
     switch (loc) {
+      case APU.rNR11:
       case APU.rNR14:
         this.square1.writeRegister(loc, value);
         break;
+
+      case APU.rNR21:
       case APU.rNR24:
         this.square2.writeRegister(loc, value);
         break;
+
       case APU.rNR34:
         break;
+
       case APU.rNR44:
         break;
+
       default:
         // Do nothing
         break;
     }
+    return value;
   }
 }
 
 window.APU = APU;
+
+class DummyChannel {
+  constructor(params) {
+    Object.assign(this, params);
+  }
+}
 
 class SquareChannel {
   static dutyCyclePatterns = {
@@ -3341,10 +3368,20 @@ class SquareChannel {
   }
 
   writeRegister(loc, value) {
-    this.lengthEnabled = (value & 0x40) !== 0;
-    if (value & 0x80) {
-      this.trigger();
+    // Update length counter
+    if (loc === this.r1) {
+      this.lengthCounter = this.maxLength - (value & 0x3f);
     }
+    else if (loc == this.r4) {
+      // Update length enabled status
+      this.lengthEnabled = (value & 0x40) !== 0;
+
+      // Trigger channel
+      if (value & 0x80) {
+        this.trigger();
+      }
+    }
+    return value;
   }
 
   getAmplitude() {
@@ -3366,7 +3403,7 @@ class SquareChannel {
     // Set length enabled flag
     // Reset the length counter if expired
     if (this.lengthCounter === 0) {
-      this.lengthCounter = this.maxLength - (this.mmu.readByte(this.r1) & 0x3f);
+      this.lengthCounter = this.maxLength;
     }
 
     // Set channel volume to initial envelope volume
@@ -3477,7 +3514,7 @@ class SquareChannel {
         // Update shadow register, write new frequency to NR13/14
         // Then run frequency calculation again but don't write it back (??)
         if (newFrequency <= 2047) {
-          this.sweepFrequency = newFrequency;
+          this.sweepFrequency = newFrequency
 
           let msb = newFrequency >> 8 & 0x7;
           let lsb = newFrequency & 0xff;

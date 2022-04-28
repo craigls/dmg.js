@@ -72,7 +72,6 @@ class CPU {
   }
 
   writeByte(loc, value) {
-
     // Intercept writes to NRx4 register, route to correct channel
     if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       this.apu.writeRegister(loc, value);
