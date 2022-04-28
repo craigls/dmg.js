@@ -386,7 +386,7 @@ class CPU {
   writeByte(loc, value) {
 
     // Intercept writes to NRx4 register, route to correct channel
-    if (loc >= APU.rNR11 && loc <= APU.rNR41) {
+    if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       this.apu.writeRegister(loc, value);
     }
     // Selects joypad buttons to read from (dpad or action button)
@@ -3388,12 +3388,12 @@ class SquareChannel {
     this.frequencyTimer = (2048 - frequency) * 4;
 
     // Update sweep (channel 0 only)
-    if (this.channelId == 0) {
+    if (this.channelId === 0) {
       let value = this.mmu.readByte(this.r0);
       let period = (value & 0x70) >> 4;
       let shift = value & 0x7;
       this.sweepTimer = period;
-      this.sweepFrequency = this.frequencyTimer;
+      this.sweepFrequency = 2048 - frequency;
 
       if (period !== 0 || shift !== 0) {
         this.sweepEnabled = true;
@@ -3402,7 +3402,7 @@ class SquareChannel {
         this.sweepEnabled = false;
       }
       if (shift !== 0) {
-        this.updateSweep();
+        this.calcSweepFrequency();
       }
     }
 
@@ -3428,8 +3428,6 @@ class SquareChannel {
   }
 
   clockLength() {
-    //if (this.lengthEnabled && this.lengthCounter > 0) { // Doesn't seem to work. Why?
-    if (this.lengthEnabled && this.lengthCounter > 0) {
       this.lengthCounter--;
 
       if (this.lengthCounter === 0) {
@@ -3469,43 +3467,49 @@ class SquareChannel {
       this.sweepTimer--;
 
       if (this.sweepTimer === 0) {
-        this.updateSweep();
+        let value = this.mmu.readByte(this.r0);
+        let shift = value & 0x7;
+        let period = (value & 0x70) >> 4;
+
+        let newFrequency = this.calcSweepFrequency();
+
+        // Update shadow register, write new frequency to NR13/14
+        // Then run frequency calculation again but don't write it back (??)
+        if (newFrequency <= 2047) {
+          this.sweepFrequency = newFrequency;
+
+          let msb = newFrequency >> 8 & 0x7;
+          let lsb = newFrequency & 0xff;
+
+          this.mmu.writeByte(this.r3, lsb);
+          this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
+
+          this.calcSweepFrequency();
+        }
+        // Reload timer
+        this.sweepTimer = period;
       }
     }
   }
 
-  updateSweep() {
+  calcSweepFrequency() {
     let value = this.mmu.readByte(this.r0);
     let negate = (value & 0x8) !== 0;
     let shift = value & 0x7;
-
-    if (shift !== 0) {
-      let newFrequency = this.calcSweepFrequency(shift, negate)
-      let mmu = this.mmu;
-
-      // Update shadow register, write new frequency to NR13/14
-      // Then run frequency calculation again but don't write it back (??)
-      if (newFrequency <= 2047) {
-        this.sweepFrequency = newFrequency;
-        this.mmu.writeByte(this.r3, newFrequency & 0x0f);
-        this.mmu.writeByte(this.r4, newFrequency >> 4);
-        this.calcSweepFrequency(shift, negate);
-      }
-    }
-  }
-
-  calcSweepFrequency(shift, negate) {
-    let frequency = this.sweepFrequency >> shift;
+    let newFrequency = this.sweepFrequency >> shift;
     if (negate) {
-      frequency = ~frequency;
+      newFrequency = this.sweepFrequency - newFrequency;
+    }
+    else {
+      newFrequency = this.sweepFrequency + newFrequency;
     }
     // If overflow disable square 1 channel
-    if (this.sweepFrequency + frequency > 2047) {
-        let statuses = this.mmu.readByte(APU.rNR52);
-        this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
-        this.enabled = false;
+    if (newFrequency > 2047) {
+      let statuses = this.mmu.readByte(APU.rNR52);
+      this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
+      this.enabled = false;
     }
-    return this.sweepFrequency + frequency;
+    return newFrequency;
   }
 }
 

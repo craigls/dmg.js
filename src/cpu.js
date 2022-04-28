@@ -74,7 +74,7 @@ class CPU {
   writeByte(loc, value) {
 
     // Intercept writes to NRx4 register, route to correct channel
-    if (loc >= APU.rNR11 && loc <= APU.rNR41) {
+    if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       this.apu.writeRegister(loc, value);
     }
     // Selects joypad buttons to read from (dpad or action button)
