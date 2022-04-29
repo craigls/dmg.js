@@ -3163,6 +3163,7 @@ class APU {
     this.cycles = 0;
     this.sampleRate = this.audioContext.sampleRate;
     this.samplingInterval = Math.floor(Constants.CLOCK_SPEED / this.sampleRate);
+    this.enabled = false;
 
     this.square1 = new SquareChannel({
       channelId: 0,
@@ -3183,7 +3184,7 @@ class APU {
       mmu: this.mmu,
     });
 
-    this.wave = new DummyChannel({
+    this.wave = new WaveChannel({
       channelId: 2,
       r1: APU.rNR31,
       r2: APU.rNR32,
@@ -3191,7 +3192,7 @@ class APU {
       r4: APU.rNR34,
     });
 
-    this.noise = new DummyChannel({
+    this.noise = new NoiseChannel({
       channelId: 3,
       r1: APU.rNR41,
       r2: APU.rNR42,
@@ -3208,6 +3209,7 @@ class APU {
     this.currentFrame = 0;
     this.audioQueue = [];
     this.nextAudioTime = 0;
+    this.enabled = false;
   }
 
   processAudioQueue() {
@@ -3311,11 +3313,13 @@ class APU {
     // Route NRxx writes to correct channel
     switch (loc) {
       case APU.rNR11:
+      case APU.rNR12:
       case APU.rNR14:
         this.square1.writeRegister(loc, value);
         break;
 
       case APU.rNR21:
+      case APU.rNR22:
       case APU.rNR24:
         this.square2.writeRegister(loc, value);
         break;
@@ -3335,12 +3339,6 @@ class APU {
 }
 
 window.APU = APU;
-
-class DummyChannel {
-  constructor(params) {
-    Object.assign(this, params);
-  }
-}
 
 class SquareChannel {
   static dutyCyclePatterns = {
@@ -3364,13 +3362,20 @@ class SquareChannel {
     this.sweepTimer = 0;
     this.sweepFrequency = 0;
     this.sweepEnabled = false;
-    this.enabled = true;
+    this.enabled = false;
   }
 
   writeRegister(loc, value) {
     // Update length counter
     if (loc === this.r1) {
       this.lengthCounter = this.maxLength - (value & 0x3f);
+    }
+    // Recieved DAC disable
+    else if (loc === this.r2 && (value & 0xf8) == 0) {
+      this.volume = 0;
+      this.enabled = false;
+      let value = this.mmu.readByte(APU.rNR52);
+      this.mmu.writeByte(APU.rNR52, value & ~(1 << this.channelId));
     }
     else if (loc == this.r4) {
       // Update length enabled status
@@ -3514,7 +3519,7 @@ class SquareChannel {
         // Update shadow register, write new frequency to NR13/14
         // Then run frequency calculation again but don't write it back (??)
         if (newFrequency <= 2047) {
-          this.sweepFrequency = newFrequency
+          this.sweepFrequency = newFrequency;
 
           let msb = newFrequency >> 8 & 0x7;
           let lsb = newFrequency & 0xff;
@@ -3550,6 +3555,10 @@ class SquareChannel {
     return newFrequency;
   }
 }
+
+
+class WaveChannel {}
+class NoiseChannel {}
 
 // LCDScreen
 class LCDScreen {
