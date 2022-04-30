@@ -248,7 +248,7 @@ class SquareChannel {
     this.lengthEnabled = false;
     this.envelopeTimer = 0;
     this.sweepTimer = 0;
-    this.sweepFrequency = 0;
+    this.shadowFrequency = 0;
     this.sweepEnabled = false;
     this.enabled = false;
   }
@@ -260,10 +260,9 @@ class SquareChannel {
     }
     // Recieved DAC disable
     else if (loc === this.r2 && (value & 0xf8) == 0) {
-      this.volume = 0;
       this.enabled = false;
-      let value = this.mmu.readByte(APU.rNR52);
-      this.mmu.writeByte(APU.rNR52, value & ~(1 << this.channelId));
+      let statuses = this.mmu.readByte(APU.rNR52);
+      this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
     }
     else if (loc == this.r4) {
       // Update length enabled status
@@ -281,7 +280,7 @@ class SquareChannel {
     if (this.enabled) {
       let dutyN = this.mmu.readByte(this.r1) >> 6;
       let dutyCycle = SquareChannel.dutyCyclePatterns[dutyN] & (1 << this.wavePos);
-      return dutyCycle * this.volume;
+      return dutyCycle * (this.enabled ? this.volume : 0);
     }
     return 0;
   }
@@ -323,7 +322,7 @@ class SquareChannel {
       let period = (value & 0x70) >> 4;
       let shift = value & 0x7;
       this.sweepTimer = period;
-      this.sweepFrequency = 2048 - frequency;
+      this.shadowFrequency = 2048 - frequency;
 
       if (period !== 0 || shift !== 0) {
         this.sweepEnabled = true;
@@ -407,7 +406,7 @@ class SquareChannel {
         // Update shadow register, write new frequency to NR13/14
         // Then run frequency calculation again but don't write it back (??)
         if (newFrequency <= 2047) {
-          this.sweepFrequency = newFrequency;
+          this.shadowFrequency = newFrequency;
 
           let msb = newFrequency >> 8 & 0x7;
           let lsb = newFrequency & 0xff;
@@ -427,12 +426,12 @@ class SquareChannel {
     let value = this.mmu.readByte(this.r0);
     let negate = (value & 0x8) !== 0;
     let shift = value & 0x7;
-    let newFrequency = this.sweepFrequency >> shift;
+    let newFrequency = this.shadowFrequency >> shift;
     if (negate) {
-      newFrequency = this.sweepFrequency - newFrequency;
+      newFrequency = this.shadowFrequency - newFrequency;
     }
     else {
-      newFrequency = this.sweepFrequency + newFrequency;
+      newFrequency = this.shadowFrequency + newFrequency;
     }
     // If overflow disable square 1 channel
     if (newFrequency > 2047) {
@@ -445,5 +444,24 @@ class SquareChannel {
 }
 
 
-class WaveChannel {}
+class WaveChannel {
+  static startAddress = 0xff30; // wavetable is at 0xff30 to 0xff3f
+
+  constructor(params) {
+    Object.assign(this, params);
+    this.position = 0;
+    this.sampleBuffer = [];
+    this.maxLength = 256;
+  }
+
+  getAmplitude() {
+    this.buffer >> this.mmu.readByte(this.r0);
+  }
+
+  clockFrequency() {
+    this.position = (this.position + 1) % 64; //
+    this.buffer = this.mmu.readByte(this.base + this.position);
+  }
+}
+
 class NoiseChannel {}

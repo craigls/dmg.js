@@ -77,7 +77,7 @@ class CPU {
       this.apu.writeRegister(loc, value);
     }
     // Selects joypad buttons to read from (dpad or action button)
-    if (loc == Constants.JOYP_REG) {
+    else if (loc == Constants.JOYP_REG) {
       this.joypad.write(value);
     }
     return this.mmu.writeByte(loc, value);
