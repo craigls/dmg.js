@@ -198,6 +198,7 @@ class APU {
   }
 
   writeRegister(loc, value) {
+
     // Route NRxx writes to correct channel
     switch (loc) {
       case APU.rNR11:
@@ -317,7 +318,7 @@ class SquareChannel {
       let period = (value & 0x70) >> 4;
       let shift = value & 0x7;
       this.sweepTimer = period || 8; // set to 8 if period is zero (why?)
-      this.shadowFrequency = 2048 - frequency;
+      this.shadowFrequency = frequency;
 
       if (period !== 0 || shift !== 0) {
         this.sweepEnabled = true;

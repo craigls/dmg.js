@@ -386,13 +386,17 @@ class CPU {
   writeByte(loc, value) {
     // Intercept writes to NRx4 register, route to correct channel
     if (loc >= APU.rNR11 && loc <= APU.rNR52) {
-      this.apu.writeRegister(loc, value);
+      this.mmu.writeByte(loc, value);
+      return this.apu.writeRegister(loc, value);
     }
     // Selects joypad buttons to read from (dpad or action button)
     else if (loc == Constants.JOYP_REG) {
+      this.mmu.writeByte(loc, value);
       this.joypad.write(value);
     }
-    return this.mmu.writeByte(loc, value);
+    else {
+      return this.mmu.writeByte(loc, value);
+    }
   }
 
   nextByte() {
@@ -3310,6 +3314,7 @@ class APU {
   }
 
   writeRegister(loc, value) {
+
     // Route NRxx writes to correct channel
     switch (loc) {
       case APU.rNR11:
@@ -3429,7 +3434,7 @@ class SquareChannel {
       let period = (value & 0x70) >> 4;
       let shift = value & 0x7;
       this.sweepTimer = period || 8; // set to 8 if period is zero (why?)
-      this.shadowFrequency = 2048 - frequency;
+      this.shadowFrequency = frequency;
 
       if (period !== 0 || shift !== 0) {
         this.sweepEnabled = true;
