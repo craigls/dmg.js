@@ -305,15 +305,10 @@ class SquareChannel {
     this.envelopeTimer = value & 0x7;
 
     // Update frequency timer
-    // Use contents of NRx3/NRx4 if bit 6 of NRx4 set
-    let frequency = 0;
-
-    if ((this.mmu.readByte(this.r4) & 0x40) !== 0) {
-      frequency = uint16(
-        this.mmu.readByte(this.r4) & 0x7,
-        this.mmu.readByte(this.r3)
-      );
-    }
+    let frequency = uint16(
+      this.mmu.readByte(this.r4) & 0x7,
+      this.mmu.readByte(this.r3)
+    );
     this.frequencyTimer = (2048 - frequency) * 4;
 
     // Update sweep (channel 0 only)
@@ -321,7 +316,7 @@ class SquareChannel {
       let value = this.mmu.readByte(this.r0);
       let period = (value & 0x70) >> 4;
       let shift = value & 0x7;
-      this.sweepTimer = period;
+      this.sweepTimer = period || 8; // set to 8 if period is zero (why?)
       this.shadowFrequency = 2048 - frequency;
 
       if (period !== 0 || shift !== 0) {
@@ -342,17 +337,15 @@ class SquareChannel {
   }
 
   clockFrequency() {
-    if (this.frequencyTimer > 0) {
+    this.frequencyTimer--;
 
-      this.frequencyTimer--;
-      if (this.frequencyTimer === 0) {
-        let frequency = uint16(
-          this.mmu.readByte(this.r4) & 0x7,
-          this.mmu.readByte(this.r3)
-        );
-        this.wavePos = (this.wavePos + 1) % 8;
-        this.frequencyTimer = (2048 - frequency) * 4;
-      }
+    if (this.frequencyTimer === 0) {
+      let frequency = uint16(
+        this.mmu.readByte(this.r4) & 0x7,
+        this.mmu.readByte(this.r3)
+      );
+      this.wavePos = (this.wavePos + 1) % 8;
+      this.frequencyTimer = (2048 - frequency) * 4;
     }
   }
 
@@ -377,10 +370,10 @@ class SquareChannel {
     let increase = (value & 0x8) !== 0;
     let period = value & 0x7;
 
-    if (period > 0) {
-      this.envelopeTimer--;
+    this.envelopeTimer--;
 
-      if (this.envelopeTimer === 0) {
+    if (this.envelopeTimer === 0) {
+      if (period > 0) {
         this.envelopeTimer = period;
         let adjustment = increase ? 1 : -1;
         let newVolume = this.volume + adjustment;
@@ -401,23 +394,26 @@ class SquareChannel {
         let shift = value & 0x7;
         let period = (value & 0x70) >> 4;
 
-        let newFrequency = this.calcSweepFrequency();
+        if (period !== 0) {
 
-        // Update shadow register, write new frequency to NR13/14
-        // Then run frequency calculation again but don't write it back (??)
-        if (newFrequency <= 2047) {
-          this.shadowFrequency = newFrequency;
+          let newFrequency = this.calcSweepFrequency();
 
-          let msb = newFrequency >> 8 & 0x7;
-          let lsb = newFrequency & 0xff;
+          // Update shadow register, write new frequency to NR13/14
+          // Then run frequency calculation again but don't write it back (??)
+          if (newFrequency <= 2047 && shift !== 0) {
+            this.shadowFrequency = newFrequency;
 
-          this.mmu.writeByte(this.r3, lsb);
-          this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
+            let msb = newFrequency >> 8 & 0x7;
+            let lsb = newFrequency & 0xff;
 
-          this.calcSweepFrequency();
+            this.mmu.writeByte(this.r3, lsb);
+            this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
+
+            this.calcSweepFrequency();
+          }
+          // Reload timer
+          this.sweepTimer = period || 8; // set to 8 if period is zero (why?)
         }
-        // Reload timer
-        this.sweepTimer = period;
       }
     }
   }
