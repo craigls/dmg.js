@@ -38,3 +38,4 @@ Open dist/index.html in a browser, load a Game Boy ROM file (not included)
 - https://www.youtube.com/watch?v=HyzD8pNlpwI
 - https://github.com/retrio/gb-test-roms
 - https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
+- https://blog.tigris.fr/2021/01/26/writing-an-emulator-sound-is-still-complicated/
