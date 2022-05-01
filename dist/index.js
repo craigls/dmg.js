@@ -3558,23 +3558,43 @@ class SquareChannel {
 
 
 class WaveChannel {
-  static startAddress = 0xff30; // wavetable is at 0xff30 to 0xff3f
+  static base = 0xff30; // wavetable is at 0xff30 to 0xff3f
+  static volumeShiftRight = {
+    0: 4,
+    1: 0,
+    2: 1,
+    3: 2,
+  }
 
   constructor(params) {
     Object.assign(this, params);
-    this.position = 0;
-    this.sampleBuffer = [];
+    this.position = WaveChannel.base;
+    this.sample = null;
     this.maxLength = 256;
+    this.lengthCounter = 0;
   }
 
   getAmplitude() {
-    this.buffer >> this.mmu.readByte(this.r0);
+    let shift = WaveChannel.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
+    return this.sample >> shift;
   }
 
   clockFrequency() {
-    this.position = (this.position + 1) % 64; //
-    this.buffer = this.mmu.readByte(this.base + this.position);
+    this.position = ++this.position % 64;
+    let address = WaveChannel.base + Math.floor(this.position / 2);
+
+    if (this.position % 2 === 0) {
+      this.sample = this.mmu.readByte(address) & 0x0f;
+    }
+    else {
+      this.sample = this.mmu.readByte(address) >> 4;
+    }
   }
+
+  trigger() {
+    this.position = 0;
+  }
+
 }
 
 class NoiseChannel {}
