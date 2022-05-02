@@ -3153,6 +3153,7 @@ class APU {
   static lengthSequence =   [1, 0, 1, 0, 1, 0, 1, 0];
   static envelopeSequence = [0, 0, 0, 0, 0, 0, 0, 1];
   static sweepSequence =    [0, 0, 1, 0, 0, 0, 1, 0];
+  static defaultGainAmount = 0.01;
 
   constructor(mmu) {
     this.mmu = mmu;
@@ -3167,7 +3168,6 @@ class APU {
     this.sampleRate = this.audioContext.sampleRate;
     this.samplingInterval = Math.floor(Constants.CLOCK_SPEED / this.sampleRate);
     this.enabled = false;
-    this.masterGain = 0.0001;
 
     this.square1 = new SquareChannel({
       channelId: 0,
@@ -3239,8 +3239,9 @@ class APU {
 
       let source = this.audioContext.createBufferSource();
       let gain = this.audioContext.createGain();
+
       gain.connect(this.audioContext.destination);
-      gain.gain.value = this.masterGain; // Why's it so loud?
+      gain.gain.value = APU.defaultGainAmount;
       source.buffer = buffer;
       source.connect(gain);
       source.start(this.nextAudioTime);
@@ -3481,18 +3482,18 @@ class SquareChannel extends BaseChannel{
   constructor(params) {
     super(params);
     this.position = 0;
-    this.maxLength = 64;
     this.sweepTimer = 0;
     this.shadowFrequency = 0;
     this.sweepEnabled = false;
     this.rDAC = null;
     this.rDACmask = null;
+    this.maxLength = null;
   }
 
   getAmplitude() {
-    let dutyN = this.mmu.readByte(this.r1) >> 6;
-    let dutyCycle = SquareChannel.dutyCyclePatterns[dutyN] & (1 << this.position);
-    return dutyCycle * (this.enabled ? this.volume : 0);
+    let n = this.mmu.readByte(this.r1) >> 6;
+    let bit = SquareChannel.dutyCyclePatterns[n] & (1 << this.position);
+    return (bit ? 1 : 0) * (this.enabled ? this.volume : 0);
   }
 
   update() {
@@ -3624,8 +3625,7 @@ class WaveChannel extends BaseChannel{
     super(params);
     this.position = 0;
     this.sample = null;
-    this.maxLength = 256;
-    this.log = [];
+    this.maxLength = 64;
   }
 
   update() {
@@ -3645,7 +3645,7 @@ class WaveChannel extends BaseChannel{
       sample = this.mmu.readByte(address) & 0x0f;
     }
     // TODO: Is this correct?
-    return this.enabled ? (sample * 100 >> shift) : 0;
+    return this.enabled ? (sample >> shift) : 0;
   }
 
   updatePosition() {
