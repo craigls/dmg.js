@@ -3612,8 +3612,12 @@ class SquareChannel extends BaseChannel{
 
 window.SquareChannel = SquareChannel;
 
+// Wave channel
 class WaveChannel extends BaseChannel{
-  static baseAddress = 0xff30; // wavetable is at 0xff30 to 0xff3f
+
+  // Wavetable is at 0xff30 to 0xff3f
+  // Each wave uses 4 bits of memory
+  static baseAddress = 0xff30;
   static volumeShiftRight = {
     0: 4,
     1: 0,
@@ -3644,12 +3648,11 @@ class WaveChannel extends BaseChannel{
     else {
       sample = this.mmu.readByte(address) & 0x0f;
     }
-    // TODO: Is this correct?
     return this.enabled ? (sample >> shift) : 0;
   }
 
   updatePosition() {
-    this.position = ++this.position % 64;
+    this.position = ++this.position % 32;
   }
 
   updateFrequency() {
