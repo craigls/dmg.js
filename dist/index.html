@@ -11,18 +11,30 @@ canvas {
   image-rendering: crisp-edges;
   background-color: #ccc;
 }
+#main {
+  display: grid;
+  align-items: center;
+  justify-content: center;
+}
+
+#loadrom {
+  padding: 10px 0 25px 0;
+}
+
 </style>
 </head>
 <body>
-<div>
-<canvas id="screen"></canvas>
-</div>
-<div>
-<br>
-<input id="rom" type="file" name="rom" accept=".gb" onchange="loadRomFromFile(this.files[0])">
-</div>
-<div>
-<!-- <canvas id="vramviewer"></canvas> -->
+<div id="main">
+  <div id="loadrom">
+    <br>
+    <input id="rom" type="file" name="rom" accept=".gb" onchange="loadRomFromFile(this.files[0])">
+  </div>
+  <div>
+    <canvas id="screen"></canvas>
+  </div>
+  <div>
+  <!-- <canvas id="vramviewer"></canvas> -->
+  </div>
 </div>
 <script src="index.js"></script>
 </body>
