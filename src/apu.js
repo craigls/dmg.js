@@ -63,6 +63,7 @@ class APU {
       r4: APU.rNR14,
       rDAC: APU.rNR12,
       rDACmask: 0xf8,
+      maxLength: 64,
       mmu: this.mmu,
     });
 
@@ -74,6 +75,7 @@ class APU {
       r4: APU.rNR24,
       rDAC: APU.rNR12,
       rDACmask: 0xf8,
+      maxLength: 64,
       mmu: this.mmu,
     });
 
@@ -85,6 +87,7 @@ class APU {
       r4: APU.rNR34,
       rDAC: APU.rNR30,
       rDACmask: 0x80,
+      maxLength: 256,
       mmu: this.mmu,
     });
 
@@ -94,11 +97,16 @@ class APU {
       r2: APU.rNR42,
       r3: APU.rNR43,
       r4: APU.rNR44,
+      rDAC: APU.rNR42,
+      rDACmask: 0xf8,
+      maxLength: 64,
+      mmu: this.mmu,
     });
 
     this.channels.push(this.square1);
     this.channels.push(this.square2);
     this.channels.push(this.wave);
+    this.channels.push(this.noise);
   }
 
   reset() {
@@ -139,6 +147,7 @@ class APU {
       this.square1.clockFrequency();
       this.square2.clockFrequency();
       this.wave.clockFrequency();
+      this.noise.clockFrequency();
 
       // Advance frame sequencer
       if (this.cycles % APU.frameSequencerRate === 0) {
@@ -149,10 +158,12 @@ class APU {
           this.square1.clockLength();
           this.square2.clockLength();
           this.wave.clockLength();
+          this.noise.clockLength();
         }
         if (APU.envelopeSequence[step] === 1) {
           this.square1.clockEnvelope();
           this.square2.clockEnvelope();
+          this.noise.clockEnvelope();
         }
         if (APU.sweepSequence[step] === 1) {
           this.square1.clockSweep();
@@ -234,7 +245,11 @@ class APU {
         this.wave.writeRegister(loc, value);
         break;
 
+      case APU.rNR41:
+      case APU.rNR42:
+      case APU.rNR43:
       case APU.rNR44:
+        this.noise.writeRegister(loc, value);
         break;
 
       default:
@@ -269,7 +284,7 @@ class BaseChannel {
 
     // Update length counter
     if (loc === this.r1) {
-      this.lengthCounter = this.maxLength - (value & 0x3f);
+      this.lengthCounter = this.maxLength - (value & (this.maxLength - 1));
     }
     // Recieved DAC disable
     else if (loc === this.rDAC && (value & this.rDACmask) == 0) {
@@ -323,10 +338,6 @@ class BaseChannel {
       this.lengthCounter--;
 
       if (this.lengthCounter === 0) {
-        // Set channel status flag to zero (disabled)
-        let statuses = this.mmu.readByte(APU.rNR52);
-        this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
-
         // Disable channel
         this.disable();
       }
@@ -514,7 +525,7 @@ class WaveChannel extends BaseChannel{
     super(params);
     this.position = 0;
     this.sample = null;
-    this.maxLength = 64;
+    this.maxLength = 256;
   }
 
   update() {
@@ -572,4 +583,84 @@ class WaveChannel extends BaseChannel{
 
 window.WaveChannel = WaveChannel;
 
-class NoiseChannel {}
+class NoiseChannel extends BaseChannel {
+  static divisorCodes = {
+    0: 8,
+    1: 16,
+    2: 32,
+    3: 48,
+    4: 64,
+    5: 80,
+    6: 96,
+    7: 112,
+  };
+
+  constructor(params) {
+    super(params);
+    this.LFSR = 32767;
+  }
+
+  update() {
+    this.updateLFSR();
+    this.updateFrequency();
+  }
+
+  getAmplitude() {
+    return this.enabled ? (this.volume * (~this.LFSR & 1)) : 0;
+  }
+
+  updateLFSR() {
+    let value = this.mmu.readByte(this.r3);
+    let width = (value & 0x8) !== 0;
+
+    // XOR lower two bits together
+    let bb = (this.LFSR & 1) ^ ((this.LFSR & 2) >> 1);
+
+    // shift LFSR right by one, add XOR result to high bit
+    this.LFSR = (bb << 14) | (this.LFSR >> 1);
+
+    // if width mode, add XOR result to bit 6
+    if (width) {
+      this.LFSR = this.LFSR & ~(1 << 6);
+      this.LFSR = this.LFSR | (bb << 6);
+      this.LFSR = this.LFSR & 0x7f;
+    }
+  }
+
+  updateFrequency() {
+    let value = this.mmu.readByte(this.r3);
+    let shift = value >> 4;
+    let divisor = NoiseChannel.divisorCodes[value & 0x7];
+    this.frequencyTimer = (divisor << shift);
+  }
+
+  trigger() {
+    let statuses = this.mmu.readByte(APU.rNR52);
+    this.mmu.writeByte(APU.rNR52, statuses | (1 << this.channelId));
+
+    if (this.lengthCounter === 0) {
+      this.lengthCounter = this.maxLength;
+    }
+    this.enabled = true;
+
+    // Set channel volume to initial envelope volume
+    // and volume envelope timer to period
+    let value = this.mmu.readByte(this.r2);
+    this.volume = value >> 4;
+    this.envelopeTimer = value & 0x7;
+
+    // reset LFSR
+    this.LFSR = 32767;
+
+    // Reload frequency timer
+    this.updateFrequency();
+  }
+
+  disable() {
+    this.enabled = false;
+    let statuses = this.mmu.readByte(APU.rNR52);
+    this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
+  }
+
+}
+window.NoiseChannel = NoiseChannel;
