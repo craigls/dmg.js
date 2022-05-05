@@ -3445,7 +3445,7 @@ class APU {
   // WRite to channel status register, disable channel
   channelDisable(channel) {
     let statuses = this.mmu.readByte(APU.rNR52);
-    this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
+    this.mmu.writeByte(APU.rNR52, statuses & ~(1 << channel.channelId));
     channel.enabled = false;
   }
 
@@ -3539,9 +3539,7 @@ class APU {
     }
     // If overflow disable square 1 channel
     if (newFrequency > 2047) {
-      let statuses = this.mmu.readByte(APU.rNR52);
-      this.mmu.writeByte(APU.rNR52, statuses & ~(1 << channel.channelId));
-      channel.enabled = false;
+      this.channelDisable(channel);
     }
     return newFrequency;
   }
