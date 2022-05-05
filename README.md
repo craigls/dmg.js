@@ -1,15 +1,15 @@
 # Game Boy emulator in JavaScript
 
 I got inspired while watching the youtube channel of Modern Vintage Gamer. 
-In a video, he discusses Game Boy emulation and how it is easy to implement. 
+In a video, he talks about Game Boy emulation and how it is easy to implement.
 So I wanted to try it for myself. 
 
 The emulator is able to run a few games (like Tetris, Super Mario Land, Link's Awakening)
-but there's lots of bugs and missing features (sound, memory banking, etc).
+but there's lots of bugs and missing features (memory banking, etc).
 This project is just for fun and shouldn't be used as a reference.
 
 ## How to run it
-Open dist/index.html in a browser, load a Game Boy ROM file (not included)
+Open dist/index.html in Google Chrome, load a Game Boy ROM file.
 
 ## Controls
 | key | button |
@@ -23,6 +23,11 @@ Open dist/index.html in a browser, load a Game Boy ROM file (not included)
 | u | select | 
 | i | start | 
 
+
+## Features in development
+- Game Boy Color
+- Memory banking
+- Performance optimizations
 
 ## Useful links
 
