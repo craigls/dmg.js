@@ -16,7 +16,6 @@ class CPU {
     this.PC = 0;
     this.code = null
     this.cbcode = null;
-    this.prevcode = null;
     this.totalCycles = 0;
     this.cycles = 0;
     this.IMEEnabled = false;
@@ -41,7 +40,6 @@ class CPU {
   reset() {
     this.code = null;
     this.cbcode = null;
-    this.prevcode = null;
     this.cycles = 0;
     this.totalCycles = 0;
     this.IMEEnabled = false;
@@ -2198,7 +2196,6 @@ class CPU {
   // CPU update
   update() {
     this.cycles = 0;
-    this.prevCode = this.code;
     this.nextInstruction();
     this.updateTimers();
     this.updateInterrupts();

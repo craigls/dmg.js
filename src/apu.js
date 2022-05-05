@@ -1,37 +1,36 @@
 // APU
-
 class APU {
-  // channel 1 (tone and sweep)
-  static rNR10 = 0xff10; // sweep register (rw)
-  static rNR11 = 0xff11; // sound length/wave pattern duty (rw)
-  static rNR12 = 0xff12; // volume env (rw)
-  static rNR13 = 0xff13; // freq lo (w)
-  static rNR14 = 0xff14; // freq hi (rw)
+  // Channel 1 (tone and sweep)
+  static rNR10 = 0xff10; // Sweep period, negate, shift
+  static rNR11 = 0xff11; // Duty, Length load (64-L)
+  static rNR12 = 0xff12; // Starting volume, Envelope add mode, period
+  static rNR13 = 0xff13; // Frequency LSB
+  static rNR14 = 0xff14; // Trigger, Length enable, Frequency MSB
 
-  // channel 2 (tone)
-  static rNR21 = 0xff16; // sound length/wave pattern duty (rw)
-  static rNR22 = 0xff17; // volume env (rw)
-  static rNR23 = 0xff18; // freq lo data (w)
-  static rNR24 = 0xff19; // freq hi data (w)
+  // Channel 2 (tone)
+  static rNR21 = 0xff16; // Duty, Length load (64-L)
+  static rNR22 = 0xff17; // Starting volume, Envelope add mode, period
+  static rNR23 = 0xff18; // Frequency LSB
+  static rNR24 = 0xff19; // Trigger, Length enable, Frequency MSB
 
-  // channel 3 (wave)
+  // Channel 3 (wave)
   // wave pattern ram is at ff30-ff3f
-  static rNR30 = 0xff1a; // sound on/off (rw)
-  static rNR31 = 0xff1b; // sound length (w)
-  static rNR32 = 0xff1c; // select output level (rw)
-  static rNR33 = 0xff1d; // freq lo data (rw)
-  static rNR34 = 0xff1e; // freq hi data (rw)
+  static rNR30 = 0xff1a; // DAC power
+  static rNR31 = 0xff1b; // Length load (256-L)
+  static rNR32 = 0xff1c; // Volume code (00=0%, 01=100%, 10=50%, 11=25%)
+  static rNR33 = 0xff1d; // Frequency LSB
+  static rNR34 = 0xff1e; // Trigger, Length enable, Frequency MSB
 
-  // channel 4 (noise)
-  static rNR41 = 0xff20; // sound length (w)
-  static rNR42 = 0xff21; // volume env (rw)
-  static rNR43 = 0xff22; // polynomial counter (rw)
-  static rNR44 = 0xff23; // counter/consecutive; initial (rw)
+  // Channel 4 (noise)
+  static rNR41 = 0xff20; // Length load (64-L)
+  static rNR42 = 0xff21; // Starting volume, Envelope add mode, period
+  static rNR43 = 0xff22; // Clock shift, Width mode of LFSR, Divisor code
+  static rNR44 = 0xff23; // Trigger, Length enable
 
-  // sound control registers
-  static rNR50 = 0xff24; // channel control / on-off / volume (r/w)
-  static rNR51 = 0xff25; // sound output terminal (rw)
-  static rNR52 = 0xff26; // sound on/off
+  // Sound control registers
+  static rNR50 = 0xff24; // Vin L enable, Left vol, Vin R enable, Right vol
+  static rNR51 = 0xff25; // Left enables, Right enables
+  static rNR52 = 0xff26; // Power control/status, Channel length statuses
 
   static frameCount = 1024;
   static frameSequencerRate = 8192;
