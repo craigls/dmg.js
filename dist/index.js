@@ -3592,6 +3592,9 @@ class Square extends Channel {
   reset() {
     this.resetTimer();
     this.position = 0;
+
+    // Reset duty cycle
+    this.mmu.writeByte(this.r1, this.mmu.readByte(this.r1) & ~0xff);
   }
 
   // Frequency timer
