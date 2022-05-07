@@ -303,7 +303,6 @@ class APU {
     let value = this.mmu.readByte(channel.r2);
     channel.volume = value >> 4;
     channel.envelopeTimer = value & 0x7;
-    channel.resetTimer();
     channel.reset();
 
     // Update sweep (channel 0 only)
@@ -617,6 +616,7 @@ class Noise extends Channel {
   }
 
   reset() {
+    this.resetTimer();
     this.LFSR = 32767;
   }
 }
