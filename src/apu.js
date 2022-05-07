@@ -336,6 +336,16 @@ window.APU = APU;
 
 class Channel {
 
+  constructor(params) {
+    this.volume = 0;
+    this.frequency = 0;
+    this.frequencyTimer = 0;
+    this.lengthCounter = 0;
+    this.lengthEnabled = false;
+    this.envelopeTimer = 0;
+    this.enabled = false;
+  }
+
   // Frequency timer
   clockFrequency() {
     this.frequencyTimer--;
@@ -451,13 +461,6 @@ class Square extends Channel {
   constructor(params) {
     super(params);
     Object.assign(this, params);
-    this.volume = 0;
-    this.frequency = 0;
-    this.frequencyTimer = 0;
-    this.lengthCounter = 0;
-    this.lengthEnabled = false;
-    this.envelopeTimer = 0;
-    this.enabled = false;
     this.position = 0;
   }
 
@@ -505,13 +508,6 @@ class Wavetable extends Channel {
   constructor(params) {
     super(params);
     Object.assign(this, params);
-    this.volume = 0; // not used
-    this.frequency = 0;
-    this.frequencyTimer = 0;
-    this.lengthCounter = 0;
-    this.lengthEnabled = false;
-    this.envelopeTimer = 0;
-    this.enabled = false;
     this.position = 0;
     this.sample = null;
   }
@@ -575,14 +571,6 @@ class Noise extends Channel {
   constructor(params) {
     super(params);
     Object.assign(this, params);
-    this.volume = 0;
-    this.frequency = 0;
-    this.frequencyTimer = 0;
-    this.lengthCounter = 0;
-    this.lengthEnabled = false;
-    this.envelopeTimer = 0;
-    this.enabled = false;
-    this.sample = null;
     this.LFSR = 32767; // 15-bit linear feedback shift register
   }
 
