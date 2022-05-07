@@ -230,12 +230,14 @@ class APU {
     switch (loc) {
       case APU.rNR11:
       case APU.rNR12:
+      case APU.rNR13:
       case APU.rNR14:
         this.channelWrite(this.square1, loc, value);
         break;
 
       case APU.rNR21:
       case APU.rNR22:
+      case APU.rNR23:
       case APU.rNR24:
         this.channelWrite(this.square2, loc, value);
         break;
@@ -483,16 +485,6 @@ class Square extends Channel {
 
     // Reset duty cycle
     this.mmu.writeByte(this.r1, this.mmu.readByte(this.r1) & ~0xff);
-  }
-
-  // Frequency timer
-  clockFrequency() {
-    this.frequencyTimer--;
-
-    if (this.frequencyTimer === 0) {
-      this.update();
-      this.resetTimer();
-    }
   }
 }
 
