@@ -219,12 +219,8 @@ class MMU {
 
   OAMDMATransfer(value) {
     let src = value << 8;
-    let dst = 0xfe00;
     for (var n = 0; n < 160; n++) {
-      if (dst < 0x8000) {
-        throw new Error("Invalid address for DMA transfer: " + dst);
-      }
-      this.writeByte(dst + n, this.readByte(src + n));
+      this.oam[n] = this.readByte(src + n);
     }
   }
 }
