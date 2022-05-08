@@ -179,7 +179,7 @@ class PPU {
     let curStatMode = this.readByte(Constants.STAT_REG) & 0b11;
 
     // Update STAT mode if different than current
-    if (statMode !== curStatMode) {
+    if (! isNaN(statMode) && statMode !== curStatMode) {
       this.setStatMode(statMode);
       this.evalStatInterrupt();
     }
