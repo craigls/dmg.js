@@ -287,6 +287,7 @@ class PPU {
       cgbVramBank: flags & (1 << 3) ? true : false,
       cgbPalette: flags & 0b11,
       oamAddress: offset,
+      oamIndex: index,
     }
   }
 
