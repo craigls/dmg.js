@@ -41,13 +41,13 @@ class Constants {
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;
-  static LCDC_ENABLE            = 1 << 7;
+  static LCDC_ENABLE         = 1 << 7;
   static LCDC_WIN_TILEMAP    = 1 << 6;
   static LCDC_WIN_ENABLE     = 1 << 5;
   static LCDC_BGWIN_TILEDATA = 1 << 4;
-  static LCDC_BG_TILEMAP        = 1 << 3;
-  static LCDC_OBJ_SIZE          = 1 << 2;
-  static LCDC_OBJ_ENABLE        = 1 << 1;
+  static LCDC_BG_TILEMAP     = 1 << 3;
+  static LCDC_OBJ_SIZE       = 1 << 2;
+  static LCDC_OBJ_ENABLE     = 1 << 1;
   static LCDC_BGWIN_ENABLE   = 1 << 0;
 
   // LCD Y coords

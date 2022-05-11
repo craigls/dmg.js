@@ -44,13 +44,13 @@ class Constants {
 
   // LCD control register and flags
   static LCDC_REG = 0xff40;
-  static LCDC_ENABLE            = 1 << 7;
+  static LCDC_ENABLE         = 1 << 7;
   static LCDC_WIN_TILEMAP    = 1 << 6;
   static LCDC_WIN_ENABLE     = 1 << 5;
   static LCDC_BGWIN_TILEDATA = 1 << 4;
-  static LCDC_BG_TILEMAP        = 1 << 3;
-  static LCDC_OBJ_SIZE          = 1 << 2;
-  static LCDC_OBJ_ENABLE        = 1 << 1;
+  static LCDC_BG_TILEMAP     = 1 << 3;
+  static LCDC_OBJ_SIZE       = 1 << 2;
+  static LCDC_OBJ_ENABLE     = 1 << 1;
   static LCDC_BGWIN_ENABLE   = 1 << 0;
 
   // LCD Y coords
@@ -2894,6 +2894,7 @@ class PPU {
         // End VBLANK - reset to scanline 0
         else if (this.y == 154) {
           this.y = 0;
+          statMode = Constants.STAT_OAM_MODE;
         }
 
         // Update LYC=LY
@@ -3032,6 +3033,7 @@ class PPU {
       cgbVramBank: flags & (1 << 3) ? true : false,
       cgbPalette: flags & 0b11,
       oamAddress: offset,
+      oamIndex: index,
     }
   }
 

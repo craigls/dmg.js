@@ -149,6 +149,7 @@ class PPU {
         // End VBLANK - reset to scanline 0
         else if (this.y == 154) {
           this.y = 0;
+          statMode = Constants.STAT_OAM_MODE;
         }
 
         // Update LYC=LY
