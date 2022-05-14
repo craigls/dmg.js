@@ -74,7 +74,7 @@ class CPU {
     if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       return this.apu.writeByte(loc, value);
     }
-    // Selects joypad buttons to read from (dpad or action button)
+    // Route to joypad
     else if (loc == Constants.JOYP_REG) {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
@@ -2165,28 +2165,27 @@ class CPU {
   }
 
   updateTimers() {
-    // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
 
     if (tac & 0b100) { // Check timer enabled
       let timer = this.readByte(Constants.TIMA_REG);
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-
       this.timerCycles += this.cycles;
+
+      // TIMA: increment timer and check for overflow
       if (this.timerCycles >= freq) {
         timer++;
         this.timerCycles = 0;
+        this.writeByte(Constants.TIMA_REG, timer & 0xff);
       }
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
       if (timer > 0xff) {
-        timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
+        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG) & 0xff);
       }
       else {
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
       }
-      // Update TIMA w/new value
-      this.writeByte(Constants.TIMA_REG, timer);
     }
 
     // DIV: write to IO directly to avoid reset

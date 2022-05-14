@@ -96,7 +96,6 @@ class Constants {
   static TIMA_REG = 0xff05; // Timer counter
   static TMA_REG = 0xff06; // Timer modulo
   static TAC_REG = 0xff07; // Timer control
-  static TAC_ENABLE = 4; // Timer enable
   static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
   // Palette
@@ -386,7 +385,7 @@ class CPU {
     if (loc >= APU.rNR11 && loc <= APU.rNR52) {
       return this.apu.writeByte(loc, value);
     }
-    // Selects joypad buttons to read from (dpad or action button)
+    // Route to joypad
     else if (loc == Constants.JOYP_REG) {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
@@ -2477,28 +2476,27 @@ class CPU {
   }
 
   updateTimers() {
-    // TIMA: increment timer and check for overflow
     let tac = this.readByte(Constants.TAC_REG)
 
     if (tac & 0b100) { // Check timer enabled
       let timer = this.readByte(Constants.TIMA_REG);
       let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
-
       this.timerCycles += this.cycles;
+
+      // TIMA: increment timer and check for overflow
       if (this.timerCycles >= freq) {
         timer++;
         this.timerCycles = 0;
+        this.writeByte(Constants.TIMA_REG, timer & 0xff);
       }
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
       if (timer > 0xff) {
-        timer = this.readByte(Constants.TMA_REG);
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
+        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG) & 0xff);
       }
       else {
         this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
       }
-      // Update TIMA w/new value
-      this.writeByte(Constants.TIMA_REG, timer);
     }
 
     // DIV: write to IO directly to avoid reset
@@ -2788,6 +2786,7 @@ class PPU {
     this.winX = 0;
     this.winY = 0;
     this.BGP = 0;
+    this.dots = 0;
   }
 
   reset() {
@@ -2797,6 +2796,7 @@ class PPU {
     this.cycles = 0;
     this.LCDEnabled = false;
     this.sprites = [];
+    this.dots = 0;
   }
 
   readByte(loc) {
@@ -2865,60 +2865,65 @@ class PPU {
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
-      // Render BG and sprites if x & y are within screen boundary and respective layer is enabled
-      if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
-        if (this.LCDC & Constants.LCDC_BGWIN_ENABLE) {
-          this.drawBackground(this.x, this.y);
-        }
-        if (this.LCDC & Constants.LCDC_BGWIN_ENABLE && this.LCDC & Constants.LCDC_WIN_ENABLE) {
-          this.drawWindow(this.x, this.y);
-        }
-        if (this.LCDC & Constants.LCDC_OBJ_ENABLE) {
-          this.drawSprites(this.x, this.y);
-        }
+      // OAM scan for 80 dots (cycles)
+      if (this.dots < 80) {
+        this.dots++;
+        statMode = Constants.STAT_OAM_MODE;
       }
-
-      // End HBLANK - update next scanline
-      if (this.x == 456) {
-        this.x = 0;
-        this.y++;
-
-        // Begin VBLANK
-        if (this.y == 144) {
-          // Set VBLANK STAT mode & interrupt flag
-          statMode = Constants.STAT_VBLANK_MODE;
-          this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
-          this.screen.update(this.frameBuf);
-        }
-
-        // End VBLANK - reset to scanline 0
-        else if (this.y == 154) {
-          this.y = 0;
-          statMode = Constants.STAT_OAM_MODE;
-        }
-
-        // Update LYC=LY
-        this.writeByte(Constants.LY_REG, this.y);
-        this.evalLYCLYInterrupt();
-
-        // Get sprites for the current line
-        this.sprites = this.getSpritesForLine(this.y);
-
-      }
-      // Set STAT mode when in non-VBLANK state
       else {
-        if (this.y < 144) {
-          if (this.x === 0) {
+        // Render BG and sprites if x & y are within screen boundary and respective layer is enabled
+        if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
+          if (this.LCDC & Constants.LCDC_BGWIN_ENABLE) {
+            this.drawBackground(this.x, this.y);
+          }
+          if (this.LCDC & Constants.LCDC_BGWIN_ENABLE && this.LCDC & Constants.LCDC_WIN_ENABLE) {
+            this.drawWindow(this.x, this.y);
+          }
+          if (this.LCDC & Constants.LCDC_OBJ_ENABLE) {
+            this.drawSprites(this.x, this.y);
+          }
+        }
+        // End HBLANK - update next scanline
+        if (this.dots == 456) {
+          this.dots = 0;
+          this.x = 0;
+          this.y++;
+
+          // Begin VBLANK
+          if (this.y == 144) {
+            // Set VBLANK STAT mode & interrupt flag
+            statMode = Constants.STAT_VBLANK_MODE;
+            this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+            this.screen.update(this.frameBuf);
+          }
+
+          // End VBLANK - reset to scanline 0
+          else if (this.y == 154) {
+            this.y = 0;
             statMode = Constants.STAT_OAM_MODE;
           }
-          else if (this.x === 80) {
-            statMode = Constants.STAT_TRANSFER_MODE;
-          }
-          else if (this.x === 252) {
-            statMode = Constants.STAT_HBLANK_MODE;
-          }
+
+          // Update LYC=LY
+          this.writeByte(Constants.LY_REG, this.y);
+          this.evalLYCLYInterrupt();
+
+          // Get sprites for the current line
+          this.sprites = this.getSpritesForLine(this.y);
+
         }
-        this.x++;
+        // Set STAT mode when in non-VBLANK state
+        else {
+          if (this.y < 144) {
+            if (this.dots === 80) {
+              statMode = Constants.STAT_TRANSFER_MODE;
+            }
+            else if (this.dots === 252) {
+              statMode = Constants.STAT_HBLANK_MODE;
+            }
+          }
+          this.x++;
+          this.dots++;
+        }
       }
     }
 
