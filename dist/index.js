@@ -2787,6 +2787,7 @@ class PPU {
     this.winY = 0;
     this.BGP = 0;
     this.dots = 0;
+    this.skipFrame = true;
   }
 
   reset() {
@@ -2797,6 +2798,7 @@ class PPU {
     this.LCDEnabled = false;
     this.sprites = [];
     this.dots = 0;
+    this.skipFrame = true;
   }
 
   readByte(loc) {
@@ -2853,6 +2855,7 @@ class PPU {
     if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
       this.evalLYCLYInterrupt();
+      this.skipFrame = true; // Skip first frame when enabling LCD - screen garbage otherwise
     }
 
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
@@ -2894,12 +2897,13 @@ class PPU {
             statMode = Constants.STAT_VBLANK_MODE;
             this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
 
-            if (this.LCDEnabled) {
+            if (this.LCDEnabled && ! this.skipFrame) {
               this.screen.update(this.frameBuf);
             }
             else {
               this.screen.reset();
             }
+            this.skipFrame = false;
           }
 
           // End VBLANK - reset to scanline 0
