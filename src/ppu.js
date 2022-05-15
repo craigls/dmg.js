@@ -67,13 +67,9 @@ class PPU {
   }
 
   setStatMode(statMode) {
-    let stat = this.readByte(Constants.STAT_REG);
-    stat &= ~(
-        Constants.STAT_VBLANK_MODE
-      | Constants.STAT_HBLANK_MODE
-      | Constants.STAT_OAM_MODE
-      | Constants.STAT_TRANSFER_MODE
-    );
+    // clear lower two status bits of STAT register and set new STAT mode
+    let stat = this.readByte(Constants.STAT_REG)
+    stat &= ~0x3;
     this.writeByte(Constants.STAT_REG, stat | statMode);
   }
 
@@ -91,11 +87,11 @@ class PPU {
   // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
     let stat = this.readByte(Constants.STAT_REG);
-    let interrupt = stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
-    interrupt ||= stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ENABLE;
-    interrupt ||= stat & Constants.STATS_HBLANK_MODE && stat & Constants.STAT_HBLANK_ENABLE;
+    let oamInterrupt = stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
+    let vblankInterrupt = stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ENABLE;
+    let hblankInterrupt = !(oamInterrupt && vblankInterrupt) && stat & Constants.STAT_HBLANK_ENABLE;
 
-    if (interrupt) {
+    if (oamInterrupt || vblankInterrupt || hblankInterrupt) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
     }
   }
