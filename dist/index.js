@@ -2866,10 +2866,12 @@ class PPU {
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
-      // OAM scan for 80 dots (cycles)
-      if (this.dots < 80) {
+      // OAM scan for 80 dots (cycles) while not in VBLANK
+      if (this.y < 144 && this.dots < 80) {
+        if (this.dots === 0) {
+          statMode = Constants.STAT_OAM_MODE;
+        }
         this.dots++;
-        statMode = Constants.STAT_OAM_MODE;
       }
       else {
         // Render BG and sprites if x & y are within screen boundary and respective layer is enabled
@@ -2886,13 +2888,22 @@ class PPU {
         }
         // End HBLANK - update next scanline
         if (this.dots == 456) {
-          this.dots = 0;
           this.x = 0;
           this.y++;
-          statMode = Constants.STAT_OAM_MODE;
+          this.dots = 0;
+
+          // New line outside VBLANK - return to OAM mode
+          if (this.y < 144) {
+            statMode = Constants.STAT_OAM_MODE;
+          }
+          // End VBLANK - reset to scanline 0
+          else if (this.y == 154) {
+            this.y = 0;
+            statMode = Constants.STAT_OAM_MODE;
+          }
 
           // Begin VBLANK
-          if (this.y == 144) {
+          else if (this.y == 144) {
             // Set VBLANK STAT mode & interrupt flag
             statMode = Constants.STAT_VBLANK_MODE;
             this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
@@ -2904,12 +2915,6 @@ class PPU {
               this.screen.reset();
             }
             this.skipFrame = false;
-          }
-
-          // End VBLANK - reset to scanline 0
-          else if (this.y == 154) {
-            this.y = 0;
-            statMode = Constants.STAT_OAM_MODE;
           }
 
           // Update LYC=LY
