@@ -111,7 +111,6 @@ class PPU {
       this.writeByte(Constants.LY_REG, 0);
       this.evalLYCLYInterrupt();
       this.screen.reset();
-      return;
     }
 
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
@@ -152,7 +151,13 @@ class PPU {
             // Set VBLANK STAT mode & interrupt flag
             statMode = Constants.STAT_VBLANK_MODE;
             this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
-            this.screen.update(this.frameBuf);
+
+            if (this.LCDEnabled) {
+              this.screen.update(this.frameBuf);
+            }
+            else {
+              this.screen.reset();
+            }
           }
 
           // End VBLANK - reset to scanline 0
