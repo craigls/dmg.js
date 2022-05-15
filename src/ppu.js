@@ -145,6 +145,7 @@ class PPU {
           this.dots = 0;
           this.x = 0;
           this.y++;
+          statMode = Constants.STAT_OAM_MODE;
 
           // Begin VBLANK
           if (this.y == 144) {
