@@ -110,7 +110,6 @@ class PPU {
     if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
       this.evalLYCLYInterrupt();
-      this.screen.reset();
     }
 
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
