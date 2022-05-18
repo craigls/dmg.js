@@ -86,19 +86,38 @@ class PPU {
 
   // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
-    let stat = this.readByte(Constants.STAT_REG);
-    let oamInterrupt = stat & Constants.STAT_OAM_MODE && stat & Constants.STAT_OAM_ENABLE;
-    let vblankInterrupt = stat & Constants.STAT_VBLANK_MODE && stat & Constants.STAT_VBLANK_ENABLE;
-    let hblankInterrupt = !(oamInterrupt && vblankInterrupt) && stat & Constants.STAT_HBLANK_ENABLE;
 
-    if (oamInterrupt || vblankInterrupt || hblankInterrupt) {
+    let interrupt;
+    let stat = this.mmu.readByte(Constants.STAT_REG);
+    let statMode = stat & 0x3;
+
+    switch (statMode) {
+      case Constants.STAT_HBLANK_MODE:
+        interrupt = stat & Constants.STAT_HBLANK_ENABLE;
+        break;
+
+      case Constants.STAT_VBLANK_MODE:
+        interrupt = stat & Constants.STAT_VBLANK_ENABLE;
+        break;
+
+      case Constants.STAT_OAM_MODE:
+        interrupt = stat & Constants.STAT_OAM_ENABLE;
+        break;
+
+      case Constants.STAT_TRANSFER_MODE:
+        interrupt = stat & Constants.STAT_TRANSFER_ENABLE;
+        break;
+      default:
+        ;;
+    }
+    if (interrupt) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
     }
   }
 
   // Update the PPU for (n) cycles
   update(cycles) {
-    let statMode;
+    let statMode = null;
 
     this.cycles += cycles;
     this.LCDC = this.readByte(Constants.LCDC_REG);
@@ -197,7 +216,7 @@ class PPU {
     let curStatMode = this.readByte(Constants.STAT_REG) & 0b11;
 
     // Update STAT mode if different than current
-    if (! isNaN(statMode) && statMode !== curStatMode) {
+    if (statMode !== null && statMode !== curStatMode) {
       this.setStatMode(statMode);
       this.evalStatInterrupt();
     }
