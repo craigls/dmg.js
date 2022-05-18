@@ -44,3 +44,5 @@ Open dist/index.html in Google Chrome, load a Game Boy ROM file.
 - https://github.com/retrio/gb-test-roms
 - https://nightshade256.github.io/2021/03/27/gb-sound-emulation.html
 - https://blog.tigris.fr/2021/01/26/writing-an-emulator-sound-is-still-complicated/
+- https://github.com/mattcurrie/dmg-acid2
+- https://github.com/Hacktix/scribbltests
