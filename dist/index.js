@@ -2851,7 +2851,6 @@ class PPU {
         interrupt = stat & Constants.STAT_TRANSFER_ENABLE;
         break;
       default:
-        ;;
     }
     if (interrupt) {
       this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
