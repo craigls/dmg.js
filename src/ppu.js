@@ -126,7 +126,9 @@ class PPU {
     if (! this.LCDEnabled) {
       this.writeByte(Constants.LY_REG, 0);
       this.evalLYCLYInterrupt();
+      this.setStatMode(Constants.STAT_MODE_HBLANK);
       this.skipFrame = true; // Skip first frame when enabling LCD - screen garbage otherwise
+      return;
     }
 
     this.scrollX = this.readByte(Constants.SCROLLX_REG);
@@ -140,7 +142,7 @@ class PPU {
       // OAM scan for 80 dots (cycles) while not in VBLANK
       if (this.y < 144 && this.dots < 80) {
         if (this.dots === 0) {
-          statMode = Constants.STAT_OAM_MODE;
+          this.setStatMode(Constants.STAT_OAM_MODE);
         }
         this.dots++;
       }
@@ -165,25 +167,22 @@ class PPU {
 
           // New line outside VBLANK - return to OAM mode
           if (this.y < 144) {
-            statMode = Constants.STAT_OAM_MODE;
+            this.setStatMode(Constants.STAT_OAM_MODE);
           }
           // End VBLANK - reset to scanline 0
           else if (this.y == 154) {
             this.y = 0;
-            statMode = Constants.STAT_OAM_MODE;
+            this.setStatMode(Constants.STAT_OAM_MODE);
           }
 
           // Begin VBLANK
           else if (this.y == 144) {
             // Set VBLANK STAT mode & interrupt flag
-            statMode = Constants.STAT_VBLANK_MODE;
+            this.setStatMode(Constants.STAT_VBLANK_MODE);
             this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
 
             if (this.LCDEnabled && ! this.skipFrame) {
               this.screen.update(this.frameBuf);
-            }
-            else {
-              this.screen.reset();
             }
             this.skipFrame = false;
           }
@@ -200,10 +199,10 @@ class PPU {
         else {
           if (this.y < 144) {
             if (this.dots === 80) {
-              statMode = Constants.STAT_TRANSFER_MODE;
+              this.setStatMode(Constants.STAT_TRANSFER_MODE);
             }
             else if (this.dots === 252) {
-              statMode = Constants.STAT_HBLANK_MODE;
+              this.setStatMode(Constants.STAT_HBLANK_MODE);
             }
           }
           this.x++;
@@ -211,14 +210,7 @@ class PPU {
         }
       }
     }
-
-    let curStatMode = this.readByte(Constants.STAT_REG) & 0b11;
-
-    // Update STAT mode if different than current
-    if (statMode !== null && statMode !== curStatMode) {
-      this.setStatMode(statMode);
-      this.evalStatInterrupt();
-    }
+    this.evalStatInterrupt();
   }
 
   getColorRGB(colorId, palette) {
