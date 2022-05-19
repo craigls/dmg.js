@@ -321,10 +321,13 @@ class PPU {
 
   getSpriteData(spriteIndex) {
     let vram = this.mmu.vram;
-    let index = 16 * spriteIndex;
     let end = this.spriteHeight * 2;
+    // sprite index: ignore bit 0 when in 8x16 sprite mode
+    if (this.spriteHeight === 16) {
+      spriteIndex &= ~0x1;
+    }
     for (let offset = 0; offset < end; offset++) {
-      this.spriteData[offset] = vram[index + offset];
+      this.spriteData[offset] = vram[(spriteIndex * 16) + offset];
     }
     return this.spriteData;
   }
