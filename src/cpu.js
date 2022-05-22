@@ -79,6 +79,16 @@ class CPU {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
     }
+    // DMA Transfer
+    else if (loc == Constants.OAM_DMA_REG) {
+      this.mmu.writeByte(loc, value);
+      this.mmu.OAMDMATransfer(value);
+      this.cycles += 160; // DMA Transfer takes 160 cycles
+    }
+    // Reset DIV register
+    else if (loc == Constants.DIV_REG) {
+      this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
+    }
     else {
       return this.mmu.writeByte(loc, value);
     }

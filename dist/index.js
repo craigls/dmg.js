@@ -390,6 +390,16 @@ class CPU {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
     }
+    // DMA Transfer
+    else if (loc == Constants.OAM_DMA_REG) {
+      this.mmu.writeByte(loc, value);
+      this.mmu.OAMDMATransfer(value);
+      this.cycles += 160; // DMA Transfer takes 160 cycles
+    }
+    // Reset DIV register
+    else if (loc == Constants.DIV_REG) {
+      this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
+    }
     else {
       return this.mmu.writeByte(loc, value);
     }
@@ -2653,21 +2663,9 @@ class MMU {
 
   writeByte(loc, value) {
     // Note: Ordering of if/else blocks matters here
-    let cycles = 0;
-
-    // Reset DIV register
-    if (loc == Constants.DIV_REG) {
-      this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
-    }
-
-    // DMA Transfer
-    else if (loc == Constants.OAM_DMA_REG) {
-      this.OAMDMATransfer(value);
-      cycles = 160; // DMA Transfer takes 160 cycles
-    }
 
     // IO registers
-    else if (loc >= 0xff00 && loc <= 0xff7f) {
+    if (loc >= 0xff00 && loc <= 0xff7f) {
       this.io[loc - 0xff00] = value;
     }
 
@@ -2730,7 +2728,6 @@ class MMU {
     else {
       //console.warn("Invalid memory address: " + loc);
     }
-    return cycles;
   }
 
   OAMDMATransfer(value) {
