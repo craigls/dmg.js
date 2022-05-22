@@ -396,9 +396,9 @@ class CPU {
       this.mmu.OAMDMATransfer(value);
       this.cycles += 160; // DMA Transfer takes 160 cycles
     }
-    // Reset DIV register
+    // Reset DIV register - writing a value to DIV should reset register to zero
     else if (loc == Constants.DIV_REG) {
-      this.io[Constants.DIV_REG - 0xff00] = 0; // writing any value to DIV resets to zero
+      this.mmu.writeByte(Constants.DIV_REG, 0);
     }
     else {
       return this.mmu.writeByte(loc, value);
