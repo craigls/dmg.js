@@ -2557,7 +2557,7 @@ class MMU {
     this.xram = new Uint8Array(8 * 1024);
     this.wram = new Uint8Array(8 * 1024);
     this.hram = new Uint8Array(128);
-    this.oam = new Uint8Array(128);
+    this.oam = new Uint8Array(160);
     this.io = new Uint8Array(128);
     this.ie = 0;
     this.mbcType = 0;
