@@ -1,5 +1,57 @@
 // PPU
 class PPU {
+  // LCD status register interrupt sources/flags
+  static STAT_REG = 0xff41;
+  static STAT_LYCLY_ENABLE    = 1 << 6;
+  static STAT_OAM_ENABLE      = 1 << 5;
+  static STAT_VBLANK_ENABLE   = 1 << 4;
+  static STAT_HBLANK_ENABLE   = 1 << 3;
+  static STAT_LYCLY_EQUAL     = 1 << 2;
+  static STAT_HBLANK_MODE = 0;    // mode 0
+  static STAT_VBLANK_MODE = 1;    // mode 1
+  static STAT_OAM_MODE = 2;       // mode 2
+  static STAT_TRANSFER_MODE = 3;  // mode 3
+
+  // LCD control register and flags
+  static LCDC_REG = 0xff40;
+  static LCDC_ENABLE         = 1 << 7;
+  static LCDC_WIN_TILEMAP    = 1 << 6;
+  static LCDC_WIN_ENABLE     = 1 << 5;
+  static LCDC_BGWIN_TILEDATA = 1 << 4;
+  static LCDC_BG_TILEMAP     = 1 << 3;
+  static LCDC_OBJ_SIZE       = 1 << 2;
+  static LCDC_OBJ_ENABLE     = 1 << 1;
+  static LCDC_BGWIN_ENABLE   = 1 << 0;
+
+  // LCD Y coords
+  static LY_REG = 0xff44;
+  static LYC_REG = 0xff45;
+
+  // BG palette
+  static BGP_REG = 0xff47;
+
+  // OBJ palette data
+  static OBP0 = 0xff48;
+  static OBP1 = 0xff49;
+
+  // Misc PPU
+  static SCROLLY_REG = 0xff42;
+  static SCROLLX_REG = 0xff43;
+  static WINX_REG = 0xff4b;
+  static WINY_REG = 0xff4a;
+
+  // Screen
+  static VIEWPORT_WIDTH = 160;
+  static VIEWPORT_HEIGHT = 144;
+
+  // Palette
+  static DEFAULT_PALETTE = [
+    [224, 248, 208],  // lightest
+    [136, 192,112],   // light
+    [52, 104,86],     // dark
+    [8, 24, 32],      // darkest
+  ];
+
   /*
    * Memory Locations:
    *
@@ -45,12 +97,13 @@ class PPU {
     this.BGP = 0;
     this.dots = 0;
     this.skipFrame = true;
+    this.palette = PPU.DEFAULT_PALETTE;
   }
 
   reset() {
     this.x = 0;
     this.y = 0;
-    this.frameBuf = new ImageData(Constants.VIEWPORT_WIDTH, Constants.VIEWPORT_HEIGHT);
+    this.frameBuf = new ImageData(PPU.VIEWPORT_WIDTH, PPU.VIEWPORT_HEIGHT);
     this.cycles = 0;
     this.LCDEnabled = false;
     this.sprites = [];
@@ -68,19 +121,19 @@ class PPU {
 
   setStatMode(statMode) {
     // clear lower two status bits of STAT register and set new STAT mode
-    let stat = this.readByte(Constants.STAT_REG)
+    let stat = this.readByte(PPU.STAT_REG)
     stat &= ~0x3;
-    this.writeByte(Constants.STAT_REG, stat | statMode);
+    this.writeByte(PPU.STAT_REG, stat | statMode);
   }
 
   // Test if LYC=LY and request interrupt
   evalLYCLYInterrupt() {
-    let stat = this.readByte(Constants.STAT_REG);
-    let LYCLYEqual = this.readByte(Constants.LYC_REG) === this.readByte(Constants.LY_REG);
+    let stat = this.readByte(PPU.STAT_REG);
+    let LYCLYEqual = this.readByte(PPU.LYC_REG) === this.readByte(PPU.LY_REG);
 
-    if (LYCLYEqual && stat & Constants.STAT_LYCLY_ENABLE) {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
-      this.writeByte(Constants.STAT_REG, stat | Constants.STAT_LYCLY_EQUAL);
+    if (LYCLYEqual && stat & PPU.STAT_LYCLY_ENABLE) {
+      this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_STAT);
+      this.writeByte(PPU.STAT_REG, stat | PPU.STAT_LYCLY_EQUAL);
     }
   }
 
@@ -88,29 +141,29 @@ class PPU {
   evalStatInterrupt() {
 
     let interrupt;
-    let stat = this.mmu.readByte(Constants.STAT_REG);
+    let stat = this.mmu.readByte(PPU.STAT_REG);
     let statMode = stat & 0x3;
 
     switch (statMode) {
-      case Constants.STAT_HBLANK_MODE:
-        interrupt = stat & Constants.STAT_HBLANK_ENABLE;
+      case PPU.STAT_HBLANK_MODE:
+        interrupt = stat & PPU.STAT_HBLANK_ENABLE;
         break;
 
-      case Constants.STAT_VBLANK_MODE:
-        interrupt = stat & Constants.STAT_VBLANK_ENABLE;
+      case PPU.STAT_VBLANK_MODE:
+        interrupt = stat & PPU.STAT_VBLANK_ENABLE;
         break;
 
-      case Constants.STAT_OAM_MODE:
-        interrupt = stat & Constants.STAT_OAM_ENABLE;
+      case PPU.STAT_OAM_MODE:
+        interrupt = stat & PPU.STAT_OAM_ENABLE;
         break;
 
-      case Constants.STAT_TRANSFER_MODE:
-        interrupt = stat & Constants.STAT_TRANSFER_ENABLE;
+      case PPU.STAT_TRANSFER_MODE:
+        interrupt = stat & PPU.STAT_TRANSFER_ENABLE;
         break;
       default:
     }
     if (interrupt) {
-      this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_STAT);
+      this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_STAT);
     }
   }
 
@@ -119,43 +172,43 @@ class PPU {
     let statMode = null;
 
     this.cycles += cycles;
-    this.LCDC = this.readByte(Constants.LCDC_REG);
-    this.LCDEnabled = this.LCDC & Constants.LCDC_ENABLE ? true : false;
+    this.LCDC = this.readByte(PPU.LCDC_REG);
+    this.LCDEnabled = this.LCDC & PPU.LCDC_ENABLE ? true : false;
 
     // LCD state changed to disabled
     if (! this.LCDEnabled) {
-      this.writeByte(Constants.LY_REG, 0);
+      this.writeByte(PPU.LY_REG, 0);
       this.evalLYCLYInterrupt();
-      this.setStatMode(Constants.STAT_MODE_HBLANK);
+      this.setStatMode(PPU.STAT_MODE_HBLANK);
       this.skipFrame = true; // Skip first frame when enabling LCD - screen garbage otherwise
       return;
     }
 
-    this.scrollX = this.readByte(Constants.SCROLLX_REG);
-    this.scrollY = this.readByte(Constants.SCROLLY_REG);
-    this.winX = this.readByte(Constants.WINX_REG) - 7; // winX = window position - 7 (hardware bug?)
-    this.winY = this.readByte(Constants.WINY_REG);
-    this.BGP = this.readByte(Constants.BGP_REG);
+    this.scrollX = this.readByte(PPU.SCROLLX_REG);
+    this.scrollY = this.readByte(PPU.SCROLLY_REG);
+    this.winX = this.readByte(PPU.WINX_REG) - 7; // winX = window position - 7 (hardware bug?)
+    this.winY = this.readByte(PPU.WINY_REG);
+    this.BGP = this.readByte(PPU.BGP_REG);
 
     // For each CPU cycle, advance the PPU's state
     while (cycles--) {
       // OAM scan for 80 dots (cycles) while not in VBLANK
       if (this.y < 144 && this.dots < 80) {
         if (this.dots === 0) {
-          this.setStatMode(Constants.STAT_OAM_MODE);
+          this.setStatMode(PPU.STAT_OAM_MODE);
         }
         this.dots++;
       }
       else {
         // Render BG and sprites if x & y are within screen boundary and respective layer is enabled
-        if (this.x < Constants.VIEWPORT_WIDTH && this.y < Constants.VIEWPORT_HEIGHT) {
-          if (this.LCDC & Constants.LCDC_BGWIN_ENABLE) {
+        if (this.x < PPU.VIEWPORT_WIDTH && this.y < PPU.VIEWPORT_HEIGHT) {
+          if (this.LCDC & PPU.LCDC_BGWIN_ENABLE) {
             this.drawBackground(this.x, this.y);
           }
-          if (this.LCDC & Constants.LCDC_BGWIN_ENABLE && this.LCDC & Constants.LCDC_WIN_ENABLE) {
+          if (this.LCDC & PPU.LCDC_BGWIN_ENABLE && this.LCDC & PPU.LCDC_WIN_ENABLE) {
             this.drawWindow(this.x, this.y);
           }
-          if (this.LCDC & Constants.LCDC_OBJ_ENABLE) {
+          if (this.LCDC & PPU.LCDC_OBJ_ENABLE) {
             this.drawSprites(this.x, this.y);
           }
         }
@@ -167,19 +220,19 @@ class PPU {
 
           // New line outside VBLANK - return to OAM mode
           if (this.y < 144) {
-            this.setStatMode(Constants.STAT_OAM_MODE);
+            this.setStatMode(PPU.STAT_OAM_MODE);
           }
           // End VBLANK - reset to scanline 0
           else if (this.y == 154) {
             this.y = 0;
-            this.setStatMode(Constants.STAT_OAM_MODE);
+            this.setStatMode(PPU.STAT_OAM_MODE);
           }
 
           // Begin VBLANK
           else if (this.y == 144) {
             // Set VBLANK STAT mode & interrupt flag
-            this.setStatMode(Constants.STAT_VBLANK_MODE);
-            this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_VBLANK);
+            this.setStatMode(PPU.STAT_VBLANK_MODE);
+            this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_VBLANK);
 
             if (this.LCDEnabled && ! this.skipFrame) {
               this.screen.update(this.frameBuf);
@@ -188,7 +241,7 @@ class PPU {
           }
 
           // Update LYC=LY
-          this.writeByte(Constants.LY_REG, this.y);
+          this.writeByte(PPU.LY_REG, this.y);
           this.evalLYCLYInterrupt();
 
           // Get sprites for the current line
@@ -199,10 +252,10 @@ class PPU {
         else {
           if (this.y < 144) {
             if (this.dots === 80) {
-              this.setStatMode(Constants.STAT_TRANSFER_MODE);
+              this.setStatMode(PPU.STAT_TRANSFER_MODE);
             }
             else if (this.dots === 252) {
-              this.setStatMode(Constants.STAT_HBLANK_MODE);
+              this.setStatMode(PPU.STAT_HBLANK_MODE);
             }
           }
           this.x++;
@@ -214,7 +267,7 @@ class PPU {
   }
 
   getColorRGB(colorId, palette) {
-    return Constants.DEFAULT_PALETTE[(palette >> (2 * colorId)) & 0b11];
+    return this.palette[(palette >> (2 * colorId)) & 0b11];
   }
 
   // Finds the memory address of tile containing pixel at x, y for tilemap base address
@@ -238,7 +291,7 @@ class PPU {
     let vram = this.mmu.vram;
     let index;
 
-    if (this.LCDC & Constants.LCDC_BGWIN_TILEDATA) {
+    if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
       // Use address 0x8000
       index = 16 * tileIndex;
     }
@@ -255,7 +308,7 @@ class PPU {
   // Draws a single pixel of the BG tilemap for x, y
   drawBackground(x, y) {
     // BG tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & Constants.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
+    let base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
     let tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
     let tile = this.getTileData(tileIndex);
     let tileX = (x + this.scrollX) % this.tileSize;
@@ -274,7 +327,7 @@ class PPU {
       return;
     }
     // Window tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & Constants.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
+    let base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
     let tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
     let tile = this.getTileData(tileIndex);
@@ -350,7 +403,7 @@ class PPU {
   }
 
   drawSprites(x, y) {
-    this.spriteHeight = this.LCDC & Constants.LCDC_OBJ_SIZE ? 16 : 8;
+    this.spriteHeight = this.LCDC & PPU.LCDC_OBJ_SIZE ? 16 : 8;
 
     for (let n = 0; n < this.sprites.length; n++) {
       let sprite = this.sprites[n];
@@ -376,7 +429,7 @@ class PPU {
         if (colorId == 0) {
           continue;
         }
-        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? Constants.OBP1 : Constants.OBP0));
+        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
         this.drawPixel(x, y, rgb);
       }
     }
@@ -384,7 +437,7 @@ class PPU {
 
   drawPixel(x, y, rgb) {
     let data = this.frameBuf.data;
-    let offset = (y * Constants.VIEWPORT_WIDTH + x) * 4;
+    let offset = (y * PPU.VIEWPORT_WIDTH + x) * 4;
 
     data[offset] = rgb[0];
     data[offset + 1] = rgb[1];

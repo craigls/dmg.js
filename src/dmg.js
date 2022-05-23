@@ -1,17 +1,23 @@
 // Main emulation code
 
-const CONTROLS = {
-  "w": "up",
-  "s": "down",
-  "a": "left",
-  "d": "right",
-  "j": "b",
-  "k": "a",
-  "u": "select",
-  "i": "start",
-}
-
 class DMG {
+
+  // Emulator timing settings
+  static FRAMES_PER_SECOND = 60;
+  static CYCLES_PER_FRAME = CPU.CLOCK_SPEED / DMG.FRAMES_PER_SECOND;
+
+  // Controller mapping
+  static CONTROLS = {
+    "w": "up",
+    "s": "down",
+    "a": "left",
+    "d": "right",
+    "j": "b",
+    "k": "a",
+    "u": "select",
+    "i": "start",
+  }
+
   constructor(cpu, ppu, apu, mmu, screen, joypad, vramviewer) {
     this.cpu = cpu;
     this.ppu = ppu;
@@ -20,7 +26,7 @@ class DMG {
     this.vramviewer = vramviewer;
     this.screen = screen;
     this.joypad = joypad;
-    this.cyclesPerFrame = Constants.CYCLES_PER_FRAME;
+    this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
   }
 
@@ -113,7 +119,7 @@ class DMG {
   }
 
   keyPressed(key, state) {
-    let button = CONTROLS[key.toLowerCase()];
+    let button = DMG.CONTROLS[key.toLowerCase()];
     if (button === undefined) {
       return
     }

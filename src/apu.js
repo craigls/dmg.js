@@ -49,7 +49,7 @@ class APU {
     this.currentFrame = 0;
     this.cycles = 0;
     this.sampleRate = this.audioContext.sampleRate;
-    this.samplingInterval = Math.floor(Constants.CLOCK_SPEED / this.sampleRate);
+    this.samplingInterval = Math.floor(CPU.CLOCK_SPEED / this.sampleRate);
     this.enabled = false;
 
     this.square1 = new Square({
@@ -121,7 +121,6 @@ class APU {
 
   processAudioQueue() {
     // Schedule audio playback until the queue is empty
-    // This might be totally wrong
     while (this.audioQueue.length) {
       // HACK: Sample playback is lagging behind so fast-forward
       if (this.audioContext.currentTime > this.nextAudioTime) {

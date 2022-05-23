@@ -1,5 +1,38 @@
 // CPU
 class CPU {
+  static CLOCK_SPEED = 4194304;
+
+  // DMA transfer register
+  static OAM_DMA_REG = 0xff46;
+
+  // Interrupts
+  static IE_REG = 0xffff; // interrupt enable
+  static IF_REG = 0xff0f; // interrupt flags
+
+  // Interrupt flags
+  static IF_VBLANK  = 1 << 0;
+  static IF_STAT    = 1 << 1;
+  static IF_TIMER   = 1 << 2;
+  static IF_SERIAL  = 1 << 3;
+  static IF_JOYPAD  = 1 << 4;
+
+  // Interrupt handlers
+  static IH_VBLANK = 0x40;
+  static IH_STAT = 0x48;
+  static IH_TIMER = 0x50;
+  static IH_SERIAL = 0x58;
+  static IH_JOYPAD = 0x60;
+
+  // Timers and dividers
+  static DIV_REG = 0xff04; // Divider register
+  static TIMA_REG = 0xff05; // Timer counter
+  static TMA_REG = 0xff06; // Timer modulo
+  static TAC_REG = 0xff07; // Timer control
+  static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
+
+  // Joypad register
+  static JOYP_REG = 0xff00;
+
   constructor(mmu, apu, joypad) {
     this.mmu = mmu;
     this.apu = apu;
@@ -63,7 +96,7 @@ class CPU {
 
   readByte(loc) {
     // Route to joypad
-    if (loc == Constants.JOYP_REG) {
+    if (loc == CPU.JOYP_REG) {
       return this.joypad.read();
     }
     return this.mmu.readByte(loc);
@@ -75,19 +108,19 @@ class CPU {
       return this.apu.writeByte(loc, value);
     }
     // Route to joypad
-    else if (loc == Constants.JOYP_REG) {
+    else if (loc == CPU.JOYP_REG) {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
     }
     // DMA Transfer
-    else if (loc == Constants.OAM_DMA_REG) {
+    else if (loc == CPU.OAM_DMA_REG) {
       this.mmu.writeByte(loc, value);
       this.mmu.OAMDMATransfer(value);
       this.cycles += 160; // DMA Transfer takes 160 cycles
     }
     // Reset DIV register - writing a value to DIV should reset register to zero
-    else if (loc == Constants.DIV_REG) {
-      this.mmu.writeByte(Constants.DIV_REG, 0);
+    else if (loc == CPU.DIV_REG) {
+      this.mmu.writeByte(CPU.DIV_REG, 0);
     }
     else {
       return this.mmu.writeByte(loc, value);
@@ -2142,11 +2175,11 @@ class CPU {
     this.IMEEnabled = false;
 
     // Reset IF bit
-    this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~flag)
+    this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~flag)
   }
 
   updateInterrupts() {
-    let interrupts = this.readByte(Constants.IE_REG) & this.readByte(Constants.IF_REG) & 0x1f;
+    let interrupts = this.readByte(CPU.IE_REG) & this.readByte(CPU.IF_REG) & 0x1f;
 
     if (interrupts) {
       // Resume from halted CPU state
@@ -2157,49 +2190,49 @@ class CPU {
       return;
     }
 
-    if (interrupts & Constants.IF_VBLANK) {
-      this.handleInterrupt(Constants.IH_VBLANK, Constants.IF_VBLANK);
+    if (interrupts & CPU.IF_VBLANK) {
+      this.handleInterrupt(CPU.IH_VBLANK, CPU.IF_VBLANK);
     }
-    else if (interrupts & Constants.IF_STAT) {
-      this.handleInterrupt(Constants.IH_STAT, Constants.IF_STAT);
+    else if (interrupts & CPU.IF_STAT) {
+      this.handleInterrupt(CPU.IH_STAT, CPU.IF_STAT);
     }
-    else if (interrupts & Constants.IF_TIMER) {
-      this.handleInterrupt(Constants.IH_TIMER, Constants.IF_TIMER);
+    else if (interrupts & CPU.IF_TIMER) {
+      this.handleInterrupt(CPU.IH_TIMER, CPU.IF_TIMER);
     }
-    else if (interrupts & Constants.IF_SERIAL) {
-      this.handleInterrupt(Constants.IH_SERIAL, Constants.IF_SERIAL);
+    else if (interrupts & CPU.IF_SERIAL) {
+      this.handleInterrupt(CPU.IH_SERIAL, CPU.IF_SERIAL);
     }
-    else if (interrupts & Constants.IF_JOYPAD) {
-      this.handleInterrupt(Constants.IH_JOYPAD, Constants.IF_JOYPAD);
+    else if (interrupts & CPU.IF_JOYPAD) {
+      this.handleInterrupt(CPU.IH_JOYPAD, CPU.IF_JOYPAD);
     }
   }
 
   updateTimers() {
-    let tac = this.readByte(Constants.TAC_REG)
+    let tac = this.readByte(CPU.TAC_REG)
 
     if (tac & 0b100) { // Check timer enabled
-      let timer = this.readByte(Constants.TIMA_REG);
-      let freq = Constants.TAC_CLOCK_SELECT[tac & 0b11];
+      let timer = this.readByte(CPU.TIMA_REG);
+      let freq = CPU.TAC_CLOCK_SELECT[tac & 0b11];
       this.timerCycles += this.cycles;
 
       // TIMA: increment timer and check for overflow
       if (this.timerCycles >= freq) {
         timer++;
         this.timerCycles = 0;
-        this.writeByte(Constants.TIMA_REG, timer & 0xff);
+        this.writeByte(CPU.TIMA_REG, timer & 0xff);
       }
       // If overflow occurred: set TIMA to TMA value and trigger interrupt
       if (timer > 0xff) {
-        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) | Constants.IF_TIMER);
-        this.writeByte(Constants.TIMA_REG, this.readByte(Constants.TMA_REG) & 0xff);
+        this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_TIMER);
+        this.writeByte(CPU.TIMA_REG, this.readByte(CPU.TMA_REG) & 0xff);
       }
       else {
-        this.writeByte(Constants.IF_REG, this.readByte(Constants.IF_REG) & ~Constants.IF_TIMER);
+        this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~CPU.IF_TIMER);
       }
     }
 
     // DIV: write to IO directly to avoid reset
-    this.mmu.io[Constants.DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
+    this.mmu.io[CPU.DIV_REG - 0xff00] = (this.totalCycles / 16384) & 0xff;
   }
 
   // CPU update
