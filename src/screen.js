@@ -9,7 +9,7 @@ class LCDScreen {
 
   // Draws the contents of PPU's frame buffer to an HTML canvas
   update(imageData) {
-    this.ctx.putImageData(imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height)
+    this.ctx.putImageData(imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
   }
 
   // Clear the screen

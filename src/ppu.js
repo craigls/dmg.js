@@ -121,15 +121,15 @@ class PPU {
 
   setStatMode(statMode) {
     // clear lower two status bits of STAT register and set new STAT mode
-    let stat = this.readByte(PPU.STAT_REG)
+    let stat = this.readByte(PPU.STAT_REG);
     stat &= ~0x3;
     this.writeByte(PPU.STAT_REG, stat | statMode);
   }
 
   // Test if LYC=LY and request interrupt
   evalLYCLYInterrupt() {
-    let stat = this.readByte(PPU.STAT_REG);
-    let LYCLYEqual = this.readByte(PPU.LYC_REG) === this.readByte(PPU.LY_REG);
+    const stat = this.readByte(PPU.STAT_REG);
+    const LYCLYEqual = this.readByte(PPU.LYC_REG) === this.readByte(PPU.LY_REG);
 
     if (LYCLYEqual && stat & PPU.STAT_LYCLY_ENABLE) {
       this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_STAT);
@@ -140,9 +140,9 @@ class PPU {
   // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
 
+    const stat = this.mmu.readByte(PPU.STAT_REG);
+    const statMode = stat & 0x3;
     let interrupt;
-    let stat = this.mmu.readByte(PPU.STAT_REG);
-    let statMode = stat & 0x3;
 
     switch (statMode) {
       case PPU.STAT_HBLANK_MODE:
@@ -169,7 +169,7 @@ class PPU {
 
   // Update the PPU for (n) cycles
   update(cycles) {
-    let statMode = null;
+    const statMode = null;
 
     this.cycles += cycles;
     this.LCDC = this.readByte(PPU.LCDC_REG);
@@ -272,11 +272,11 @@ class PPU {
 
   // Finds the memory address of tile containing pixel at x, y for tilemap base address
   getTileAtCoords(x, y, base) {
-    let yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
-    let xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
+    const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
+    const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
 
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
-    let tileNum = xTiles + yTiles * this.bgNumTiles;
+    const tileNum = xTiles + yTiles * this.bgNumTiles;
 
     return this.mmu.vram[base + tileNum - 0x8000];
   }
@@ -288,7 +288,7 @@ class PPU {
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    let vram = this.mmu.vram;
+    const vram = this.mmu.vram;
     let index;
 
     if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
@@ -308,16 +308,16 @@ class PPU {
   // Draws a single pixel of the BG tilemap for x, y
   drawBackground(x, y) {
     // BG tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    let tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
-    let tile = this.getTileData(tileIndex);
-    let tileX = (x + this.scrollX) % this.tileSize;
-    let tileY = (y + this.scrollY) % this.tileSize;
+    const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
+    const tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
+    const tile = this.getTileData(tileIndex);
+    const tileX = (x + this.scrollX) % this.tileSize;
+    const tileY = (y + this.scrollY) % this.tileSize;
 
     // Save color id of pixel x, y for bg/obj priority when rendering sprites
     this.bgColorId = this.getPixelColor(tile, tileX, tileY);
 
-    let rgb = this.getColorRGB(this.bgColorId, this.BGP);
+    const rgb = this.getColorRGB(this.bgColorId, this.BGP);
     this.drawPixel(x, y, rgb);
   }
 
@@ -327,15 +327,15 @@ class PPU {
       return;
     }
     // Window tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
+    const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
-    let tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
-    let tile = this.getTileData(tileIndex);
-    let tileX = (x - this.winX) % this.tileSize;
-    let tileY = (y - this.winY) % this.tileSize;
+    const tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
+    const tile = this.getTileData(tileIndex);
+    const tileX = (x - this.winX) % this.tileSize;
+    const tileY = (y - this.winY) % this.tileSize;
 
-    let colorId = this.getPixelColor(tile, tileX, tileY);
-    let rgb = this.getColorRGB(colorId, this.BGP);
+    const colorId = this.getPixelColor(tile, tileX, tileY);
+    const rgb = this.getColorRGB(colorId, this.BGP);
     this.drawPixel(x, y, rgb);
   }
 
@@ -344,19 +344,19 @@ class PPU {
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
-    let left = tile[y * 2];
-    let right = tile[(y * 2) + 1];
-    let bit = 1 << 7 - x;
-    let hi = right & bit ? 1 : 0;
-    let lo = left & bit ? 1 : 0;
+    const left = tile[y * 2];
+    const right = tile[(y * 2) + 1];
+    const bit = 1 << 7 - x;
+    const hi = right & bit ? 1 : 0;
+    const lo = left & bit ? 1 : 0;
     return (hi << 1) + lo;
   }
 
   // Get sprite OAM data at (index)
   getSpriteOAM(index) {
-    let oam = this.mmu.oam;
-    let offset = index * 4;
-    let flags = oam[offset + 3];
+    const oam = this.mmu.oam;
+    const offset = index * 4;
+    const flags = oam[offset + 3];
     return {
       y: oam[offset],
       x: oam[offset + 1],
@@ -369,12 +369,12 @@ class PPU {
       cgbPalette: flags & 0b11,
       oamAddress: offset,
       oamIndex: index,
-    }
+    };
   }
 
   getSpriteData(spriteIndex) {
-    let vram = this.mmu.vram;
-    let end = this.spriteHeight * 2;
+    const vram = this.mmu.vram;
+    const end = this.spriteHeight * 2;
     // sprite index: ignore bit 0 when in 8x16 sprite mode
     if (this.spriteHeight === 16) {
       spriteIndex &= ~0x1;
@@ -386,11 +386,11 @@ class PPU {
   }
 
   getSpritesForLine(line) {
-    let oam = this.mmu.oam;
-    let sprites = [];
+    const oam = this.mmu.oam;
+    const sprites = [];
 
     for (let index = 0; index < 40; index++) {
-      let spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
+      const spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + this.spriteHeight > line) {
         sprites.push(this.getSpriteOAM(index));
       }
@@ -406,10 +406,10 @@ class PPU {
     this.spriteHeight = this.LCDC & PPU.LCDC_OBJ_SIZE ? 16 : 8;
 
     for (let n = 0; n < this.sprites.length; n++) {
-      let sprite = this.sprites[n];
+      const sprite = this.sprites[n];
 
       if (x >= sprite.x - 8 && x < sprite.x) {
-        let tile = this.getSpriteData(sprite.tileIndex);
+        const tile = this.getSpriteData(sprite.tileIndex);
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
         let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
 
@@ -419,7 +419,7 @@ class PPU {
         if (sprite.flipY) {
           tileY = (this.spriteHeight - 1) - tileY;
         }
-        let colorId = this.getPixelColor(tile, tileX, tileY);
+        const colorId = this.getPixelColor(tile, tileX, tileY);
 
         // BG over obj priority
         if (sprite.bgPriority && this.bgColorId > 0) {
@@ -429,15 +429,15 @@ class PPU {
         if (colorId == 0) {
           continue;
         }
-        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
+        const rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
         this.drawPixel(x, y, rgb);
       }
     }
   }
 
   drawPixel(x, y, rgb) {
-    let data = this.frameBuf.data;
-    let offset = (y * PPU.VIEWPORT_WIDTH + x) * 4;
+    const data = this.frameBuf.data;
+    const offset = (y * PPU.VIEWPORT_WIDTH + x) * 4;
 
     data[offset] = rgb[0];
     data[offset + 1] = rgb[1];

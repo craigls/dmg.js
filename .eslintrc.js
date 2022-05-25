@@ -15,6 +15,8 @@ module.exports = {
     "no-implicit-globals": "off",
     "no-unused-vars": "off",
     "no-trailing-spaces": "error",
-    "no-debugger": "off"
+    "no-debugger": "off",
+    "prefer-const": 2,
+    "semi": 2,
   },
 };

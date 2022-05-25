@@ -45,7 +45,7 @@ class APU {
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);
     this.audioQueue = null;
-    this.nextAudioTime = 0
+    this.nextAudioTime = 0;
     this.currentFrame = 0;
     this.cycles = 0;
     this.sampleRate = this.audioContext.sampleRate;
@@ -127,12 +127,12 @@ class APU {
         console.log("audio lag!");
         this.nextAudioTime = this.audioContext.currentTime;
       }
-      let buffer = this.audioContext.createBuffer(2, APU.frameCount, this.sampleRate);
+      const buffer = this.audioContext.createBuffer(2, APU.frameCount, this.sampleRate);
       buffer.getChannelData(0).set(this.audioQueue.shift());
       buffer.getChannelData(1).set(this.audioQueue.shift());
 
-      let source = this.audioContext.createBufferSource();
-      let gain = this.audioContext.createGain();
+      const source = this.audioContext.createBufferSource();
+      const gain = this.audioContext.createGain();
 
       gain.connect(this.audioContext.destination);
       gain.gain.value = APU.defaultGainAmount;
@@ -152,7 +152,7 @@ class APU {
 
       // Advance frame sequencer
       if (this.cycles % APU.frameSequencerRate === 0) {
-        let step = this.cycles / APU.frameSequencerRate % 8;
+        const step = this.cycles / APU.frameSequencerRate % 8;
         // Check if the active step is 1 (ON)
         // clock sequencer for each channel
         if (APU.lengthSequence[step] === 1) {
@@ -172,19 +172,20 @@ class APU {
       }
       // Sum audio from each channel, write to buffer
       if (this.cycles % this.samplingInterval === 0) {
+        // Get values of volume control, panning and channel status registers
+        const control = this.mmu.readByte(APU.rNR50);
+        const statuses = this.mmu.readByte(APU.rNR52);
+        const panning = this.mmu.readByte(APU.rNR51);
+
         let volumeLeft = 0;
         let volumeRight = 0;
 
-        // Get values of volume control, panning and channel status registers
-        let control = this.mmu.readByte(APU.rNR50);
-        let statuses = this.mmu.readByte(APU.rNR52);
-        let panning = this.mmu.readByte(APU.rNR51);
 
         // bit 7 set indicates audio is disabled
         if ((statuses & 0x80) !== 0) {
           // Apply panning and channel volumes
-          for (let channel of this.channels) {
-            let amplitude = channel.enabled ? channel.getAmplitude() : 0;
+          for (const channel of this.channels) {
+            const amplitude = channel.enabled ? channel.getAmplitude() : 0;
 
             // Left channel
             if ((panning & (1 << (channel.channelId + 4))) !== 0) {
@@ -299,16 +300,16 @@ class APU {
 
     // Set channel volume to initial envelope volume
     // and volume envelope timer to period
-    let value = this.mmu.readByte(channel.r2);
+    const value = this.mmu.readByte(channel.r2);
     channel.volume = value >> 4;
     channel.envelopeTimer = value & 0x7;
     channel.reset();
 
     // Update sweep (channel 0 only)
     if (channel.channelId === 0) {
-      let value = this.mmu.readByte(channel.r0);
-      let period = (value & 0x70) >> 4;
-      let shift = value & 0x7;
+      const value = this.mmu.readByte(channel.r0);
+      const period = (value & 0x70) >> 4;
+      const shift = value & 0x7;
       channel.sweepTimer = period || 8; // set to 8 if period is zero (why?)
       channel.shadowFrequency = channel.frequency;
 
@@ -324,7 +325,7 @@ class APU {
     }
 
     // Set channel status flag to ON
-    let statuses = this.mmu.readByte(APU.rNR52);
+    const statuses = this.mmu.readByte(APU.rNR52);
     this.mmu.writeByte(APU.rNR52, statuses | (1 << channel.channelId));
 
   }
@@ -362,24 +363,24 @@ class Channel {
 
       if (this.lengthCounter === 0) {
         // Disable channel
-        this.disable()
+        this.disable();
       }
     }
   }
 
   // Volume envelope timer
   clockEnvelope() {
-    let value = this.mmu.readByte(this.r2);
-    let increase = (value & 0x8) !== 0;
-    let period = value & 0x7;
+    const value = this.mmu.readByte(this.r2);
+    const increase = (value & 0x8) !== 0;
+    const period = value & 0x7;
 
     this.envelopeTimer--;
 
     if (this.envelopeTimer === 0) {
       if (period > 0) {
         this.envelopeTimer = period;
-        let adjustment = increase ? 1 : -1;
-        let newVolume = this.volume + adjustment;
+        const adjustment = increase ? 1 : -1;
+        const newVolume = this.volume + adjustment;
 
         if (newVolume >= 0 && newVolume <= 0xf) {
           this.volume = newVolume;
@@ -394,21 +395,21 @@ class Channel {
       this.sweepTimer--;
 
       if (this.sweepTimer === 0) {
-        let value = this.mmu.readByte(this.r0);
-        let shift = value & 0x7;
-        let period = (value & 0x70) >> 4;
+        const value = this.mmu.readByte(this.r0);
+        const shift = value & 0x7;
+        const period = (value & 0x70) >> 4;
 
         if (period !== 0) {
 
-          let newFrequency = this.calcSweepFrequency();
+          const newFrequency = this.calcSweepFrequency();
 
           // Update shadow register, write new frequency to NR13/14
           // Then run frequency calculation again but don't write it back (??)
           if (newFrequency <= 2047 && shift !== 0) {
             this.shadowFrequency = newFrequency;
 
-            let msb = newFrequency >> 8 & 0x7;
-            let lsb = newFrequency & 0xff;
+            const msb = newFrequency >> 8 & 0x7;
+            const lsb = newFrequency & 0xff;
 
             this.mmu.writeByte(this.r3, lsb);
             this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
@@ -423,9 +424,9 @@ class Channel {
   }
 
   calcSweepFrequency() {
-    let value = this.mmu.readByte(this.r0);
-    let negate = (value & 0x8) !== 0;
-    let shift = value & 0x7;
+    const value = this.mmu.readByte(this.r0);
+    const negate = (value & 0x8) !== 0;
+    const shift = value & 0x7;
     let newFrequency = this.shadowFrequency >> shift;
     if (negate) {
       newFrequency = this.shadowFrequency - newFrequency;
@@ -442,7 +443,7 @@ class Channel {
 
   // WRite to channel status register, disable channel
   disable() {
-    let statuses = this.mmu.readByte(APU.rNR52);
+    const statuses = this.mmu.readByte(APU.rNR52);
     this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
     this.enabled = false;
   }
@@ -464,7 +465,7 @@ class Square extends Channel {
   }
 
   getAmplitude() {
-    let n = this.mmu.readByte(this.r1) >> 6;
+    const n = this.mmu.readByte(this.r1) >> 6;
     return this.volume * ((Square.dutyCyclePatterns[n] & (1 << this.position)) & 1);
   }
 
@@ -516,8 +517,8 @@ class Wavetable extends Channel {
   }
 
   getAmplitude() {
-    let shift = Wavetable.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
-    let address = Wavetable.baseAddress + Math.floor(this.position / 2);
+    const shift = Wavetable.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
+    const address = Wavetable.baseAddress + Math.floor(this.position / 2);
     let sample = 0;
 
     if (this.position % 2 === 0) {
@@ -574,11 +575,11 @@ class Noise extends Channel {
   }
 
   update() {
-    let value = this.mmu.readByte(this.r3);
-    let width = (value & 0x8) !== 0;
+    const value = this.mmu.readByte(this.r3);
+    const width = (value & 0x8) !== 0;
 
     // XOR lower two bits together
-    let bb = (this.LFSR & 1) ^ ((this.LFSR & 2) >> 1);
+    const bb = (this.LFSR & 1) ^ ((this.LFSR & 2) >> 1);
 
     // shift LFSR right by one, add XOR result to high bit
     this.LFSR = (bb << 14) | (this.LFSR >> 1);
@@ -592,9 +593,9 @@ class Noise extends Channel {
   }
 
   resetTimer() {
-    let value = this.mmu.readByte(this.r3);
-    let shift = value >> 4;
-    let divisor = Noise.divisorCodes[value & 0x7];
+    const value = this.mmu.readByte(this.r3);
+    const shift = value >> 4;
+    const divisor = Noise.divisorCodes[value & 0x7];
     this.frequencyTimer = divisor << shift;
   }
 

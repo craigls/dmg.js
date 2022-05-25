@@ -26,7 +26,7 @@ class MMU {
     this.xram = null;
     this.wram = null;
     this.oam = null;
-    this.io = null
+    this.io = null;
     this.ie = null;
     this.mbcType = null;
     this.bankNum1 = null;
@@ -52,7 +52,7 @@ class MMU {
   }
 
   loadRom(rom) {
-    let header = this.readHeader(rom);
+    const header = this.readHeader(rom);
     this.mbcType = header.mbcType;
     this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
     this.rom2 = new Uint8Array(rom.slice(16 * 1024));
@@ -73,7 +73,7 @@ class MMU {
       ver: rom[0x014c],
       checksum1: rom[0x014d],
       checksum2: rom.slice(0x014e, 0x0150),
-    }
+    };
   }
 
   readByte(loc) {
@@ -205,7 +205,7 @@ class MMU {
   }
 
   OAMDMATransfer(value) {
-    let src = value << 8;
+    const src = value << 8;
     for (var n = 0; n < 160; n++) {
       this.oam[n] = this.readByte(src + n);
     }

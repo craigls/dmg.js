@@ -5,7 +5,7 @@
 
 function hexify(h) {
   if (h === undefined || h === null) return '(none)';
-  let s = h.toString(16);
+  const s = h.toString(16);
   if (s.length < 2) {
     return '0x0' + h.toString(16);
   }
@@ -18,7 +18,7 @@ function uint16(hi, lo) {
 
 // Two's complement to decimal
 function tcBin2Dec(num) {
-  let neg = num & (1 << 7);
+  const neg = num & (1 << 7);
   if (neg) {
     return num | ~((1 << 7) - 1);
   }
@@ -83,7 +83,7 @@ class CPU {
     this.L = 0;
     this.SP = 0;
     this.PC = 0;
-    this.code = null
+    this.code = null;
     this.cbcode = null;
     this.totalCycles = 0;
     this.cycles = 0;
@@ -96,7 +96,7 @@ class CPU {
       N: 64,  // subtraction
       H: 32,  // half carry
       C: 16,  // carry
-    }
+    };
 
     // Lookup tables used when decoding certain instructions
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
@@ -170,11 +170,11 @@ class CPU {
   // Decodes an opcode using the algorithm from:
   // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
   decode(code) {
-    let x = (code & 0b11000000) >> 6;
-    let y = (code & 0b00111000) >> 3;
-    let z = (code & 0b00000111);
-    let p = y >> 1;
-    let q = y % 2;
+    const x = (code & 0b11000000) >> 6;
+    const y = (code & 0b00111000) >> 3;
+    const z = (code & 0b00000111);
+    const p = y >> 1;
+    const q = y % 2;
 
     return {x: x, y: y, z: z, p: p, q: q};
   }
@@ -208,9 +208,9 @@ class CPU {
   }
 
   popStack() {
-    let lo = this.readByte(this.SP);
+    const lo = this.readByte(this.SP);
     this.SP++;
-    let hi = this.readByte(this.SP);
+    const hi = this.readByte(this.SP);
     this.SP++;
     return uint16(hi, lo);
   }
@@ -241,13 +241,13 @@ class CPU {
 
   // Pop 2 bytes from stack
   POP() {
-    let val = this.popStack();
+    const val = this.popStack();
     return [val >> 8, val & 0xff];
   }
 
   // Jump relative - no condition
   JR(offset) {
-    let cycles = 12;
+    const cycles = 12;
     this.PC += offset;
     return cycles;
   }
@@ -294,7 +294,7 @@ class CPU {
 
   // Jump to address
   JP(addr) {
-    let cycles = 4;
+    const cycles = 4;
     this.PC = addr;
     return cycles;
   }
@@ -341,7 +341,7 @@ class CPU {
 
   // Call function
   CALL(addr) {
-    let cycles = 24;
+    const cycles = 24;
     this.pushStack(this.PC);
     this.PC = addr;
     return cycles;
@@ -414,7 +414,7 @@ class CPU {
 
   // Return
   RET() {
-    let cycles = 16;
+    const cycles = 16;
     this.PC = this.popStack();
     return cycles;
   }
@@ -468,7 +468,6 @@ class CPU {
   // Enable interrupt
   EI() {
     this.IMEEnabled = true;
-    this.cycles += 2;
   }
 
   // Disable interrupts
@@ -501,7 +500,7 @@ class CPU {
 
   // AND
   AND(n) {
-    let val = this.A & n;
+    const val = this.A & n;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -516,7 +515,7 @@ class CPU {
 
   // OR
   OR(n) {
-    let val = this.A | n;
+    const val = this.A | n;
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("H");
@@ -530,7 +529,7 @@ class CPU {
 
   // XOR
   XOR(n) {
-    let val = this.A ^ n;
+    const val = this.A ^ n;
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("H");
@@ -545,7 +544,7 @@ class CPU {
 
   // Rotate left, prev carry bit to bit 0
   RL(n) {
-    let carry = this.getFlag("C");
+    const carry = this.getFlag("C");
     let rot = n << 1;
 
     // Previous carry is copied to bit zero
@@ -574,8 +573,8 @@ class CPU {
 
   // Rotate A left, through carry flag. Prev carry to bit 0, clear zero flag
   RLA() {
-    let bit7 = this.A & (1 << 7);
-    let carry = this.getFlag("C");
+    const bit7 = this.A & (1 << 7);
+    const carry = this.getFlag("C");
     let rot = this.A << 1;
 
     // Reset all flags
@@ -598,7 +597,7 @@ class CPU {
 
   // Rotate left: bit 7 to carry flag and bit 0
   RLC(n) {
-    let bit7 = n & (1 << 7);
+    const bit7 = n & (1 << 7);
     let rot = n << 1;
 
     // Reset all
@@ -622,15 +621,15 @@ class CPU {
 
   // RLCA - RLC applied to A register but zero flag is cleared
   RLCA() {
-    let val = this.RLC(this.A);
+    const val = this.RLC(this.A);
     this.clearFlag("Z");
     return val;
   }
 
   // Shift right: bit 0 to carry, bit 7 reset to 0
   SRL(n) {
-    let val = (n >> 1) & ~(1 << 7);
-    let bit0 = n & (1 << 0);
+    const val = (n >> 1) & ~(1 << 7);
+    const bit0 = n & (1 << 0);
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -648,8 +647,8 @@ class CPU {
 
   // Shift right: bit 0 to carry flag, bit 7 unchanged
   SRA(n) {
-    let bit0 = n & (1 << 0);
-    let bit7 = n & (1 << 7);
+    const bit0 = n & (1 << 0);
+    const bit7 = n & (1 << 7);
     let val = n >> 1;
 
     if (bit7) {
@@ -675,8 +674,8 @@ class CPU {
 
   // Shift left: bit 7 to carry, bit 0 reset to 0
   SLA(n) {
-    let val = (n << 1) & ~(1 << 0)
-    let bit7 = n & (1 << 7);
+    const bit7 = n & (1 << 7);
+    const val = (n << 1) & ~(1 << 0);
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -694,8 +693,8 @@ class CPU {
 
   // Rotate right: prev carry to bit 7
   RR(n) {
-    let carry = this.getFlag("C");
-    let bit0 = n & (1 << 0);
+    const carry = this.getFlag("C");
+    const bit0 = n & (1 << 0);
     let rot = (n >> 1);
 
     if (carry) {
@@ -721,8 +720,8 @@ class CPU {
 
   // Rotate A right, through carry flag. Prev carry to bit 7, clear zero flag
   RRA() {
-    let carry = this.getFlag("C");
-    let bit0 = this.A & (1 << 0);
+    const carry = this.getFlag("C");
+    const bit0 = this.A & (1 << 0);
     let rot = this.A >> 1;
 
     this.clearFlag("Z");
@@ -744,7 +743,7 @@ class CPU {
 
   // Rotate right: bit 0 to carry flag and bit 7
   RRC(n) {
-    let bit0 = (n & (1 << 0));
+    const bit0 = (n & (1 << 0));
     let rot = n >> 1;
 
     this.clearFlag("Z");
@@ -767,14 +766,14 @@ class CPU {
 
   // Rotate A right: bit 0 to carry flag and bit 7
   RRCA() {
-    let rot = this.RRC(this.A);
+    const rot = this.RRC(this.A);
     this.clearFlag("Z");
     return rot;
   }
 
   // Increment
   INC(n) {
-    let val = n + 1;
+    const val = n + 1;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -798,7 +797,7 @@ class CPU {
 
   // Decrement
   DEC(n) {
-    let val = n - 1;
+    const val = n - 1;
     this.setFlag("N");
     this.clearFlag("H");
     this.clearFlag("Z");
@@ -821,8 +820,8 @@ class CPU {
 
   // Addition of a + b + carry bit
   ADC(b) {
-    let carry = this.getFlag("C") ? 1 : 0;
-    let val = this.A + b + carry;
+    const carry = this.getFlag("C") ? 1 : 0;
+    const val = this.A + b + carry;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -844,7 +843,7 @@ class CPU {
 
   // Addition
   ADD(b) {
-    let val = this.A + b;
+    const val = this.A + b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -865,9 +864,9 @@ class CPU {
 
   // Add register pairs
   ADD16(a1, a2, b1, b2) {
-    let a = uint16(a1, a2);
-    let b = uint16(b1, b2);
-    let val = a + b;
+    const a = uint16(a1, a2);
+    const b = uint16(b1, b2);
+    const val = a + b;
 
     this.clearFlag("N");
     this.clearFlag("H");
@@ -899,7 +898,7 @@ class CPU {
 
   // Subtraction
   SUB(b) {
-    let val = this.A - b;
+    const val = this.A - b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -920,8 +919,8 @@ class CPU {
 
   // Subtraction: a - b - carry bit
   SBC(b) {
-    let carry = this.getFlag("C") ? 1 : 0;
-    let val = this.A - b - carry;
+    const carry = this.getFlag("C") ? 1 : 0;
+    const val = this.A - b - carry;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -960,9 +959,9 @@ class CPU {
 
   // Swap high/low nibbles
   SWAP(n) {
-    let hi = (n & 0x0f) << 4;
-    let lo = (n & 0xf0) >> 4;
-    let result = hi | lo;
+    const hi = (n & 0x0f) << 4;
+    const lo = (n & 0xf0) >> 4;
+    const result = hi | lo;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -1004,12 +1003,12 @@ class CPU {
 
   // Execute instructions
   execute(code) {
-    let r1;
-    let r2;
+    const op = this.decode(code);
     let cbop;
     let addr;
-    let op = this.decode(code);
     let val;
+    let r1;
+    let r2;
 
     this.code = code;
     this.cbcode = null;
@@ -2104,7 +2103,7 @@ class CPU {
             r1 = this.r[cbop.z];
             this[r1] = this.RES(cbop.y, this[r1]);
             this.cycles += 8;
-            break
+            break;
 
           case 0x86: // (cb) 0x86  RES 0,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
           case 0x8e: // (cb) 0x8e  RES 1,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
@@ -2211,11 +2210,11 @@ class CPU {
     this.IMEEnabled = false;
 
     // Reset IF bit
-    this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~flag)
+    this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~flag);
   }
 
   updateInterrupts() {
-    let interrupts = this.readByte(CPU.IE_REG) & this.readByte(CPU.IF_REG) & 0x1f;
+    const interrupts = this.readByte(CPU.IE_REG) & this.readByte(CPU.IF_REG) & 0x1f;
 
     if (interrupts) {
       // Resume from halted CPU state
@@ -2244,11 +2243,11 @@ class CPU {
   }
 
   updateTimers() {
-    let tac = this.readByte(CPU.TAC_REG)
+    const tac = this.readByte(CPU.TAC_REG);
 
     if (tac & 0b100) { // Check timer enabled
+      const freq = CPU.TAC_CLOCK_SELECT[tac & 0b11];
       let timer = this.readByte(CPU.TIMA_REG);
-      let freq = CPU.TAC_CLOCK_SELECT[tac & 0b11];
       this.timerCycles += this.cycles;
 
       // TIMA: increment timer and check for overflow
@@ -2310,7 +2309,7 @@ class MMU {
     this.xram = null;
     this.wram = null;
     this.oam = null;
-    this.io = null
+    this.io = null;
     this.ie = null;
     this.mbcType = null;
     this.bankNum1 = null;
@@ -2336,7 +2335,7 @@ class MMU {
   }
 
   loadRom(rom) {
-    let header = this.readHeader(rom);
+    const header = this.readHeader(rom);
     this.mbcType = header.mbcType;
     this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
     this.rom2 = new Uint8Array(rom.slice(16 * 1024));
@@ -2357,7 +2356,7 @@ class MMU {
       ver: rom[0x014c],
       checksum1: rom[0x014d],
       checksum2: rom.slice(0x014e, 0x0150),
-    }
+    };
   }
 
   readByte(loc) {
@@ -2489,7 +2488,7 @@ class MMU {
   }
 
   OAMDMATransfer(value) {
-    let src = value << 8;
+    const src = value << 8;
     for (var n = 0; n < 160; n++) {
       this.oam[n] = this.readByte(src + n);
     }
@@ -2619,15 +2618,15 @@ class PPU {
 
   setStatMode(statMode) {
     // clear lower two status bits of STAT register and set new STAT mode
-    let stat = this.readByte(PPU.STAT_REG)
+    let stat = this.readByte(PPU.STAT_REG);
     stat &= ~0x3;
     this.writeByte(PPU.STAT_REG, stat | statMode);
   }
 
   // Test if LYC=LY and request interrupt
   evalLYCLYInterrupt() {
-    let stat = this.readByte(PPU.STAT_REG);
-    let LYCLYEqual = this.readByte(PPU.LYC_REG) === this.readByte(PPU.LY_REG);
+    const stat = this.readByte(PPU.STAT_REG);
+    const LYCLYEqual = this.readByte(PPU.LYC_REG) === this.readByte(PPU.LY_REG);
 
     if (LYCLYEqual && stat & PPU.STAT_LYCLY_ENABLE) {
       this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) | CPU.IF_STAT);
@@ -2638,9 +2637,9 @@ class PPU {
   // Evaluate STAT interrupt line and request interrupt
   evalStatInterrupt() {
 
+    const stat = this.mmu.readByte(PPU.STAT_REG);
+    const statMode = stat & 0x3;
     let interrupt;
-    let stat = this.mmu.readByte(PPU.STAT_REG);
-    let statMode = stat & 0x3;
 
     switch (statMode) {
       case PPU.STAT_HBLANK_MODE:
@@ -2667,7 +2666,7 @@ class PPU {
 
   // Update the PPU for (n) cycles
   update(cycles) {
-    let statMode = null;
+    const statMode = null;
 
     this.cycles += cycles;
     this.LCDC = this.readByte(PPU.LCDC_REG);
@@ -2770,11 +2769,11 @@ class PPU {
 
   // Finds the memory address of tile containing pixel at x, y for tilemap base address
   getTileAtCoords(x, y, base) {
-    let yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
-    let xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
+    const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
+    const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
 
     // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
-    let tileNum = xTiles + yTiles * this.bgNumTiles;
+    const tileNum = xTiles + yTiles * this.bgNumTiles;
 
     return this.mmu.vram[base + tileNum - 0x8000];
   }
@@ -2786,7 +2785,7 @@ class PPU {
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    let vram = this.mmu.vram;
+    const vram = this.mmu.vram;
     let index;
 
     if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
@@ -2806,16 +2805,16 @@ class PPU {
   // Draws a single pixel of the BG tilemap for x, y
   drawBackground(x, y) {
     // BG tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    let tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
-    let tile = this.getTileData(tileIndex);
-    let tileX = (x + this.scrollX) % this.tileSize;
-    let tileY = (y + this.scrollY) % this.tileSize;
+    const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
+    const tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
+    const tile = this.getTileData(tileIndex);
+    const tileX = (x + this.scrollX) % this.tileSize;
+    const tileY = (y + this.scrollY) % this.tileSize;
 
     // Save color id of pixel x, y for bg/obj priority when rendering sprites
     this.bgColorId = this.getPixelColor(tile, tileX, tileY);
 
-    let rgb = this.getColorRGB(this.bgColorId, this.BGP);
+    const rgb = this.getColorRGB(this.bgColorId, this.BGP);
     this.drawPixel(x, y, rgb);
   }
 
@@ -2825,15 +2824,15 @@ class PPU {
       return;
     }
     // Window tilemap begins at 0x9800 or 9c000
-    let base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
+    const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
-    let tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
-    let tile = this.getTileData(tileIndex);
-    let tileX = (x - this.winX) % this.tileSize;
-    let tileY = (y - this.winY) % this.tileSize;
+    const tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
+    const tile = this.getTileData(tileIndex);
+    const tileX = (x - this.winX) % this.tileSize;
+    const tileY = (y - this.winY) % this.tileSize;
 
-    let colorId = this.getPixelColor(tile, tileX, tileY);
-    let rgb = this.getColorRGB(colorId, this.BGP);
+    const colorId = this.getPixelColor(tile, tileX, tileY);
+    const rgb = this.getColorRGB(colorId, this.BGP);
     this.drawPixel(x, y, rgb);
   }
 
@@ -2842,19 +2841,19 @@ class PPU {
 
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
     //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
-    let left = tile[y * 2];
-    let right = tile[(y * 2) + 1];
-    let bit = 1 << 7 - x;
-    let hi = right & bit ? 1 : 0;
-    let lo = left & bit ? 1 : 0;
+    const left = tile[y * 2];
+    const right = tile[(y * 2) + 1];
+    const bit = 1 << 7 - x;
+    const hi = right & bit ? 1 : 0;
+    const lo = left & bit ? 1 : 0;
     return (hi << 1) + lo;
   }
 
   // Get sprite OAM data at (index)
   getSpriteOAM(index) {
-    let oam = this.mmu.oam;
-    let offset = index * 4;
-    let flags = oam[offset + 3];
+    const oam = this.mmu.oam;
+    const offset = index * 4;
+    const flags = oam[offset + 3];
     return {
       y: oam[offset],
       x: oam[offset + 1],
@@ -2867,12 +2866,12 @@ class PPU {
       cgbPalette: flags & 0b11,
       oamAddress: offset,
       oamIndex: index,
-    }
+    };
   }
 
   getSpriteData(spriteIndex) {
-    let vram = this.mmu.vram;
-    let end = this.spriteHeight * 2;
+    const vram = this.mmu.vram;
+    const end = this.spriteHeight * 2;
     // sprite index: ignore bit 0 when in 8x16 sprite mode
     if (this.spriteHeight === 16) {
       spriteIndex &= ~0x1;
@@ -2884,11 +2883,11 @@ class PPU {
   }
 
   getSpritesForLine(line) {
-    let oam = this.mmu.oam;
-    let sprites = [];
+    const oam = this.mmu.oam;
+    const sprites = [];
 
     for (let index = 0; index < 40; index++) {
-      let spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
+      const spriteY = oam[index * 4] - 16; // sprite.y is vertical position on screen + 16
       if (spriteY <= line && spriteY + this.spriteHeight > line) {
         sprites.push(this.getSpriteOAM(index));
       }
@@ -2904,10 +2903,10 @@ class PPU {
     this.spriteHeight = this.LCDC & PPU.LCDC_OBJ_SIZE ? 16 : 8;
 
     for (let n = 0; n < this.sprites.length; n++) {
-      let sprite = this.sprites[n];
+      const sprite = this.sprites[n];
 
       if (x >= sprite.x - 8 && x < sprite.x) {
-        let tile = this.getSpriteData(sprite.tileIndex);
+        const tile = this.getSpriteData(sprite.tileIndex);
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
         let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
 
@@ -2917,7 +2916,7 @@ class PPU {
         if (sprite.flipY) {
           tileY = (this.spriteHeight - 1) - tileY;
         }
-        let colorId = this.getPixelColor(tile, tileX, tileY);
+        const colorId = this.getPixelColor(tile, tileX, tileY);
 
         // BG over obj priority
         if (sprite.bgPriority && this.bgColorId > 0) {
@@ -2927,15 +2926,15 @@ class PPU {
         if (colorId == 0) {
           continue;
         }
-        let rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
+        const rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
         this.drawPixel(x, y, rgb);
       }
     }
   }
 
   drawPixel(x, y, rgb) {
-    let data = this.frameBuf.data;
-    let offset = (y * PPU.VIEWPORT_WIDTH + x) * 4;
+    const data = this.frameBuf.data;
+    const offset = (y * PPU.VIEWPORT_WIDTH + x) * 4;
 
     data[offset] = rgb[0];
     data[offset + 1] = rgb[1];
@@ -2991,7 +2990,7 @@ class APU {
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);
     this.audioQueue = null;
-    this.nextAudioTime = 0
+    this.nextAudioTime = 0;
     this.currentFrame = 0;
     this.cycles = 0;
     this.sampleRate = this.audioContext.sampleRate;
@@ -3073,12 +3072,12 @@ class APU {
         console.log("audio lag!");
         this.nextAudioTime = this.audioContext.currentTime;
       }
-      let buffer = this.audioContext.createBuffer(2, APU.frameCount, this.sampleRate);
+      const buffer = this.audioContext.createBuffer(2, APU.frameCount, this.sampleRate);
       buffer.getChannelData(0).set(this.audioQueue.shift());
       buffer.getChannelData(1).set(this.audioQueue.shift());
 
-      let source = this.audioContext.createBufferSource();
-      let gain = this.audioContext.createGain();
+      const source = this.audioContext.createBufferSource();
+      const gain = this.audioContext.createGain();
 
       gain.connect(this.audioContext.destination);
       gain.gain.value = APU.defaultGainAmount;
@@ -3098,7 +3097,7 @@ class APU {
 
       // Advance frame sequencer
       if (this.cycles % APU.frameSequencerRate === 0) {
-        let step = this.cycles / APU.frameSequencerRate % 8;
+        const step = this.cycles / APU.frameSequencerRate % 8;
         // Check if the active step is 1 (ON)
         // clock sequencer for each channel
         if (APU.lengthSequence[step] === 1) {
@@ -3118,19 +3117,20 @@ class APU {
       }
       // Sum audio from each channel, write to buffer
       if (this.cycles % this.samplingInterval === 0) {
+        // Get values of volume control, panning and channel status registers
+        const control = this.mmu.readByte(APU.rNR50);
+        const statuses = this.mmu.readByte(APU.rNR52);
+        const panning = this.mmu.readByte(APU.rNR51);
+
         let volumeLeft = 0;
         let volumeRight = 0;
 
-        // Get values of volume control, panning and channel status registers
-        let control = this.mmu.readByte(APU.rNR50);
-        let statuses = this.mmu.readByte(APU.rNR52);
-        let panning = this.mmu.readByte(APU.rNR51);
 
         // bit 7 set indicates audio is disabled
         if ((statuses & 0x80) !== 0) {
           // Apply panning and channel volumes
-          for (let channel of this.channels) {
-            let amplitude = channel.enabled ? channel.getAmplitude() : 0;
+          for (const channel of this.channels) {
+            const amplitude = channel.enabled ? channel.getAmplitude() : 0;
 
             // Left channel
             if ((panning & (1 << (channel.channelId + 4))) !== 0) {
@@ -3245,16 +3245,16 @@ class APU {
 
     // Set channel volume to initial envelope volume
     // and volume envelope timer to period
-    let value = this.mmu.readByte(channel.r2);
+    const value = this.mmu.readByte(channel.r2);
     channel.volume = value >> 4;
     channel.envelopeTimer = value & 0x7;
     channel.reset();
 
     // Update sweep (channel 0 only)
     if (channel.channelId === 0) {
-      let value = this.mmu.readByte(channel.r0);
-      let period = (value & 0x70) >> 4;
-      let shift = value & 0x7;
+      const value = this.mmu.readByte(channel.r0);
+      const period = (value & 0x70) >> 4;
+      const shift = value & 0x7;
       channel.sweepTimer = period || 8; // set to 8 if period is zero (why?)
       channel.shadowFrequency = channel.frequency;
 
@@ -3270,7 +3270,7 @@ class APU {
     }
 
     // Set channel status flag to ON
-    let statuses = this.mmu.readByte(APU.rNR52);
+    const statuses = this.mmu.readByte(APU.rNR52);
     this.mmu.writeByte(APU.rNR52, statuses | (1 << channel.channelId));
 
   }
@@ -3308,24 +3308,24 @@ class Channel {
 
       if (this.lengthCounter === 0) {
         // Disable channel
-        this.disable()
+        this.disable();
       }
     }
   }
 
   // Volume envelope timer
   clockEnvelope() {
-    let value = this.mmu.readByte(this.r2);
-    let increase = (value & 0x8) !== 0;
-    let period = value & 0x7;
+    const value = this.mmu.readByte(this.r2);
+    const increase = (value & 0x8) !== 0;
+    const period = value & 0x7;
 
     this.envelopeTimer--;
 
     if (this.envelopeTimer === 0) {
       if (period > 0) {
         this.envelopeTimer = period;
-        let adjustment = increase ? 1 : -1;
-        let newVolume = this.volume + adjustment;
+        const adjustment = increase ? 1 : -1;
+        const newVolume = this.volume + adjustment;
 
         if (newVolume >= 0 && newVolume <= 0xf) {
           this.volume = newVolume;
@@ -3340,21 +3340,21 @@ class Channel {
       this.sweepTimer--;
 
       if (this.sweepTimer === 0) {
-        let value = this.mmu.readByte(this.r0);
-        let shift = value & 0x7;
-        let period = (value & 0x70) >> 4;
+        const value = this.mmu.readByte(this.r0);
+        const shift = value & 0x7;
+        const period = (value & 0x70) >> 4;
 
         if (period !== 0) {
 
-          let newFrequency = this.calcSweepFrequency();
+          const newFrequency = this.calcSweepFrequency();
 
           // Update shadow register, write new frequency to NR13/14
           // Then run frequency calculation again but don't write it back (??)
           if (newFrequency <= 2047 && shift !== 0) {
             this.shadowFrequency = newFrequency;
 
-            let msb = newFrequency >> 8 & 0x7;
-            let lsb = newFrequency & 0xff;
+            const msb = newFrequency >> 8 & 0x7;
+            const lsb = newFrequency & 0xff;
 
             this.mmu.writeByte(this.r3, lsb);
             this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
@@ -3369,9 +3369,9 @@ class Channel {
   }
 
   calcSweepFrequency() {
-    let value = this.mmu.readByte(this.r0);
-    let negate = (value & 0x8) !== 0;
-    let shift = value & 0x7;
+    const value = this.mmu.readByte(this.r0);
+    const negate = (value & 0x8) !== 0;
+    const shift = value & 0x7;
     let newFrequency = this.shadowFrequency >> shift;
     if (negate) {
       newFrequency = this.shadowFrequency - newFrequency;
@@ -3388,7 +3388,7 @@ class Channel {
 
   // WRite to channel status register, disable channel
   disable() {
-    let statuses = this.mmu.readByte(APU.rNR52);
+    const statuses = this.mmu.readByte(APU.rNR52);
     this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
     this.enabled = false;
   }
@@ -3410,7 +3410,7 @@ class Square extends Channel {
   }
 
   getAmplitude() {
-    let n = this.mmu.readByte(this.r1) >> 6;
+    const n = this.mmu.readByte(this.r1) >> 6;
     return this.volume * ((Square.dutyCyclePatterns[n] & (1 << this.position)) & 1);
   }
 
@@ -3462,8 +3462,8 @@ class Wavetable extends Channel {
   }
 
   getAmplitude() {
-    let shift = Wavetable.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
-    let address = Wavetable.baseAddress + Math.floor(this.position / 2);
+    const shift = Wavetable.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
+    const address = Wavetable.baseAddress + Math.floor(this.position / 2);
     let sample = 0;
 
     if (this.position % 2 === 0) {
@@ -3520,11 +3520,11 @@ class Noise extends Channel {
   }
 
   update() {
-    let value = this.mmu.readByte(this.r3);
-    let width = (value & 0x8) !== 0;
+    const value = this.mmu.readByte(this.r3);
+    const width = (value & 0x8) !== 0;
 
     // XOR lower two bits together
-    let bb = (this.LFSR & 1) ^ ((this.LFSR & 2) >> 1);
+    const bb = (this.LFSR & 1) ^ ((this.LFSR & 2) >> 1);
 
     // shift LFSR right by one, add XOR result to high bit
     this.LFSR = (bb << 14) | (this.LFSR >> 1);
@@ -3538,9 +3538,9 @@ class Noise extends Channel {
   }
 
   resetTimer() {
-    let value = this.mmu.readByte(this.r3);
-    let shift = value >> 4;
-    let divisor = Noise.divisorCodes[value & 0x7];
+    const value = this.mmu.readByte(this.r3);
+    const shift = value >> 4;
+    const divisor = Noise.divisorCodes[value & 0x7];
     this.frequencyTimer = divisor << shift;
   }
 
@@ -3566,7 +3566,7 @@ class LCDScreen {
 
   // Draws the contents of PPU's frame buffer to an HTML canvas
   update(imageData) {
-    this.ctx.putImageData(imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height)
+    this.ctx.putImageData(imageData, 0, 0, 0, 0, this.canvas.width, this.canvas.height);
   }
 
   // Clear the screen
@@ -3603,12 +3603,12 @@ class Joypad {
 
   // Register a button event (0 = pressed)
   buttonPressed(button, state) {
-    let [sel, bit] = Joypad.JOYP_BUTTONS[button];
+    const [sel, bit] = Joypad.JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
     //console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
 
     // Request joypad interrupt on button press (state = true)
-    let ifreg = this.mmu.readByte(CPU.IF_REG);
+    const ifreg = this.mmu.readByte(CPU.IF_REG);
     if (state) {
       this.mmu.writeByte(CPU.IF_REG, ifreg | CPU.IF_JOYPAD);
     }
@@ -3713,10 +3713,10 @@ class DMG {
     this.mmu.writeByte(0xff4b, 0x00);
     this.mmu.writeByte(0xffff, 0x00);
 
-    let AF = 0x01b0;
-    let BC = 0x0013;
-    let DE = 0x00d8;
-    let HL = 0x014d;
+    const AF = 0x01b0;
+    const BC = 0x0013;
+    const DE = 0x00d8;
+    const HL = 0x014d;
 
     this.cpu.A = AF >> 8;
     this.cpu.F = AF & 0xff;
@@ -3745,7 +3745,7 @@ class DMG {
   nextFrame() {
     let total = 0;
     while (total < this.cyclesPerFrame) {
-      let cycles = this.cpu.update();
+      const cycles = this.cpu.update();
       this.ppu.update(cycles);
       this.apu.update(cycles);
       total += cycles;
@@ -3761,11 +3761,8 @@ class DMG {
   }
 
   keyPressed(key, state) {
-    let button = DMG.CONTROLS[key.toLowerCase()];
-    if (button === undefined) {
-      return
-    }
-    if (this.started) {
+    const button = DMG.CONTROLS[key.toLowerCase()];
+    if (button && this.started) {
       this.joypad.buttonPressed(button, state);
     }
   }
@@ -3775,35 +3772,36 @@ class DMG {
 // TODO: Clean up this code
 
 window.createDMG = () => {
-  let screenElem = document.getElementById('screen');
-  let consoleElem = document.getElementById('console');
-  let vvElem = document.getElementById('vramviewer');
-  let mmu = new MMU();
-  let joypad = new Joypad(mmu);
-  let screen = new LCDScreen(screenElem);
-  let ppu = new PPU(mmu, screen);
-  let apu = new APU(mmu);
-  let cpu = new CPU(mmu, apu, joypad);
-  //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
+  const screenElem = document.getElementById('screen');
+  const consoleElem = document.getElementById('console');
+  const vvElem = document.getElementById('vramviewer');
+  const mmu = new MMU();
+  const joypad = new Joypad(mmu);
+  const screen = new LCDScreen(screenElem);
+  const ppu = new PPU(mmu, screen);
+  const apu = new APU(mmu);
+  const cpu = new CPU(mmu, apu, joypad);
+  //const vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
-}
+};
 
 window.loadRomFromFile = (file) => {
-  let reader = new FileReader();
-  let dmg = window.dmg;
+  const reader = new FileReader();
+  const dmg = window.dmg;
   reader.readAsArrayBuffer(file);
   reader.onload = function() {
     dmg.loadRom(Array.from(new Uint8Array(reader.result)));
     dmg.start();
-  }
-}
+  };
+};
+
 window.setupInputHandlers = () => {
-  let dmg = window.dmg;
+  const dmg = window.dmg;
   document.addEventListener('keydown', (e) => {
     dmg.keyPressed(e.key, true);
   });
   document.addEventListener('keyup', (e) => {
-    dmg.keyPressed(e.key, false)
+    dmg.keyPressed(e.key, false);
   });
 };
 

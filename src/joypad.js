@@ -25,12 +25,12 @@ class Joypad {
 
   // Register a button event (0 = pressed)
   buttonPressed(button, state) {
-    let [sel, bit] = Joypad.JOYP_BUTTONS[button];
+    const [sel, bit] = Joypad.JOYP_BUTTONS[button];
     this.buttons[sel] = state ? (this.buttons[sel] & ~bit) : (this.buttons[sel] | bit);
     //console.info("joypad event: name=" + button + " select=" + sel + " state=" + state + " buttons=" + this.buttons);
 
     // Request joypad interrupt on button press (state = true)
-    let ifreg = this.mmu.readByte(CPU.IF_REG);
+    const ifreg = this.mmu.readByte(CPU.IF_REG);
     if (state) {
       this.mmu.writeByte(CPU.IF_REG, ifreg | CPU.IF_JOYPAD);
     }

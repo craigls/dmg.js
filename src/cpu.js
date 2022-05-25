@@ -47,7 +47,7 @@ class CPU {
     this.L = 0;
     this.SP = 0;
     this.PC = 0;
-    this.code = null
+    this.code = null;
     this.cbcode = null;
     this.totalCycles = 0;
     this.cycles = 0;
@@ -60,7 +60,7 @@ class CPU {
       N: 64,  // subtraction
       H: 32,  // half carry
       C: 16,  // carry
-    }
+    };
 
     // Lookup tables used when decoding certain instructions
     // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
@@ -134,11 +134,11 @@ class CPU {
   // Decodes an opcode using the algorithm from:
   // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
   decode(code) {
-    let x = (code & 0b11000000) >> 6;
-    let y = (code & 0b00111000) >> 3;
-    let z = (code & 0b00000111);
-    let p = y >> 1;
-    let q = y % 2;
+    const x = (code & 0b11000000) >> 6;
+    const y = (code & 0b00111000) >> 3;
+    const z = (code & 0b00000111);
+    const p = y >> 1;
+    const q = y % 2;
 
     return {x: x, y: y, z: z, p: p, q: q};
   }
@@ -172,9 +172,9 @@ class CPU {
   }
 
   popStack() {
-    let lo = this.readByte(this.SP);
+    const lo = this.readByte(this.SP);
     this.SP++;
-    let hi = this.readByte(this.SP);
+    const hi = this.readByte(this.SP);
     this.SP++;
     return uint16(hi, lo);
   }
@@ -205,13 +205,13 @@ class CPU {
 
   // Pop 2 bytes from stack
   POP() {
-    let val = this.popStack();
+    const val = this.popStack();
     return [val >> 8, val & 0xff];
   }
 
   // Jump relative - no condition
   JR(offset) {
-    let cycles = 12;
+    const cycles = 12;
     this.PC += offset;
     return cycles;
   }
@@ -258,7 +258,7 @@ class CPU {
 
   // Jump to address
   JP(addr) {
-    let cycles = 4;
+    const cycles = 4;
     this.PC = addr;
     return cycles;
   }
@@ -305,7 +305,7 @@ class CPU {
 
   // Call function
   CALL(addr) {
-    let cycles = 24;
+    const cycles = 24;
     this.pushStack(this.PC);
     this.PC = addr;
     return cycles;
@@ -378,7 +378,7 @@ class CPU {
 
   // Return
   RET() {
-    let cycles = 16;
+    const cycles = 16;
     this.PC = this.popStack();
     return cycles;
   }
@@ -432,7 +432,6 @@ class CPU {
   // Enable interrupt
   EI() {
     this.IMEEnabled = true;
-    this.cycles += 2;
   }
 
   // Disable interrupts
@@ -465,7 +464,7 @@ class CPU {
 
   // AND
   AND(n) {
-    let val = this.A & n;
+    const val = this.A & n;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -480,7 +479,7 @@ class CPU {
 
   // OR
   OR(n) {
-    let val = this.A | n;
+    const val = this.A | n;
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("H");
@@ -494,7 +493,7 @@ class CPU {
 
   // XOR
   XOR(n) {
-    let val = this.A ^ n;
+    const val = this.A ^ n;
     this.clearFlag("Z");
     this.clearFlag("N");
     this.clearFlag("H");
@@ -509,7 +508,7 @@ class CPU {
 
   // Rotate left, prev carry bit to bit 0
   RL(n) {
-    let carry = this.getFlag("C");
+    const carry = this.getFlag("C");
     let rot = n << 1;
 
     // Previous carry is copied to bit zero
@@ -538,8 +537,8 @@ class CPU {
 
   // Rotate A left, through carry flag. Prev carry to bit 0, clear zero flag
   RLA() {
-    let bit7 = this.A & (1 << 7);
-    let carry = this.getFlag("C");
+    const bit7 = this.A & (1 << 7);
+    const carry = this.getFlag("C");
     let rot = this.A << 1;
 
     // Reset all flags
@@ -562,7 +561,7 @@ class CPU {
 
   // Rotate left: bit 7 to carry flag and bit 0
   RLC(n) {
-    let bit7 = n & (1 << 7);
+    const bit7 = n & (1 << 7);
     let rot = n << 1;
 
     // Reset all
@@ -586,15 +585,15 @@ class CPU {
 
   // RLCA - RLC applied to A register but zero flag is cleared
   RLCA() {
-    let val = this.RLC(this.A);
+    const val = this.RLC(this.A);
     this.clearFlag("Z");
     return val;
   }
 
   // Shift right: bit 0 to carry, bit 7 reset to 0
   SRL(n) {
-    let val = (n >> 1) & ~(1 << 7);
-    let bit0 = n & (1 << 0);
+    const val = (n >> 1) & ~(1 << 7);
+    const bit0 = n & (1 << 0);
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -612,8 +611,8 @@ class CPU {
 
   // Shift right: bit 0 to carry flag, bit 7 unchanged
   SRA(n) {
-    let bit0 = n & (1 << 0);
-    let bit7 = n & (1 << 7);
+    const bit0 = n & (1 << 0);
+    const bit7 = n & (1 << 7);
     let val = n >> 1;
 
     if (bit7) {
@@ -639,8 +638,8 @@ class CPU {
 
   // Shift left: bit 7 to carry, bit 0 reset to 0
   SLA(n) {
-    let val = (n << 1) & ~(1 << 0)
-    let bit7 = n & (1 << 7);
+    const bit7 = n & (1 << 7);
+    const val = (n << 1) & ~(1 << 0);
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -658,8 +657,8 @@ class CPU {
 
   // Rotate right: prev carry to bit 7
   RR(n) {
-    let carry = this.getFlag("C");
-    let bit0 = n & (1 << 0);
+    const carry = this.getFlag("C");
+    const bit0 = n & (1 << 0);
     let rot = (n >> 1);
 
     if (carry) {
@@ -685,8 +684,8 @@ class CPU {
 
   // Rotate A right, through carry flag. Prev carry to bit 7, clear zero flag
   RRA() {
-    let carry = this.getFlag("C");
-    let bit0 = this.A & (1 << 0);
+    const carry = this.getFlag("C");
+    const bit0 = this.A & (1 << 0);
     let rot = this.A >> 1;
 
     this.clearFlag("Z");
@@ -708,7 +707,7 @@ class CPU {
 
   // Rotate right: bit 0 to carry flag and bit 7
   RRC(n) {
-    let bit0 = (n & (1 << 0));
+    const bit0 = (n & (1 << 0));
     let rot = n >> 1;
 
     this.clearFlag("Z");
@@ -731,14 +730,14 @@ class CPU {
 
   // Rotate A right: bit 0 to carry flag and bit 7
   RRCA() {
-    let rot = this.RRC(this.A);
+    const rot = this.RRC(this.A);
     this.clearFlag("Z");
     return rot;
   }
 
   // Increment
   INC(n) {
-    let val = n + 1;
+    const val = n + 1;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -762,7 +761,7 @@ class CPU {
 
   // Decrement
   DEC(n) {
-    let val = n - 1;
+    const val = n - 1;
     this.setFlag("N");
     this.clearFlag("H");
     this.clearFlag("Z");
@@ -785,8 +784,8 @@ class CPU {
 
   // Addition of a + b + carry bit
   ADC(b) {
-    let carry = this.getFlag("C") ? 1 : 0;
-    let val = this.A + b + carry;
+    const carry = this.getFlag("C") ? 1 : 0;
+    const val = this.A + b + carry;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -808,7 +807,7 @@ class CPU {
 
   // Addition
   ADD(b) {
-    let val = this.A + b;
+    const val = this.A + b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -829,9 +828,9 @@ class CPU {
 
   // Add register pairs
   ADD16(a1, a2, b1, b2) {
-    let a = uint16(a1, a2);
-    let b = uint16(b1, b2);
-    let val = a + b;
+    const a = uint16(a1, a2);
+    const b = uint16(b1, b2);
+    const val = a + b;
 
     this.clearFlag("N");
     this.clearFlag("H");
@@ -863,7 +862,7 @@ class CPU {
 
   // Subtraction
   SUB(b) {
-    let val = this.A - b;
+    const val = this.A - b;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -884,8 +883,8 @@ class CPU {
 
   // Subtraction: a - b - carry bit
   SBC(b) {
-    let carry = this.getFlag("C") ? 1 : 0;
-    let val = this.A - b - carry;
+    const carry = this.getFlag("C") ? 1 : 0;
+    const val = this.A - b - carry;
 
     this.clearFlag("Z");
     this.clearFlag("H");
@@ -924,9 +923,9 @@ class CPU {
 
   // Swap high/low nibbles
   SWAP(n) {
-    let hi = (n & 0x0f) << 4;
-    let lo = (n & 0xf0) >> 4;
-    let result = hi | lo;
+    const hi = (n & 0x0f) << 4;
+    const lo = (n & 0xf0) >> 4;
+    const result = hi | lo;
 
     this.clearFlag("Z");
     this.clearFlag("N");
@@ -968,12 +967,12 @@ class CPU {
 
   // Execute instructions
   execute(code) {
-    let r1;
-    let r2;
+    const op = this.decode(code);
     let cbop;
     let addr;
-    let op = this.decode(code);
     let val;
+    let r1;
+    let r2;
 
     this.code = code;
     this.cbcode = null;
@@ -2068,7 +2067,7 @@ class CPU {
             r1 = this.r[cbop.z];
             this[r1] = this.RES(cbop.y, this[r1]);
             this.cycles += 8;
-            break
+            break;
 
           case 0x86: // (cb) 0x86  RES 0,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
           case 0x8e: // (cb) 0x8e  RES 1,(HL)  length: 2  cycles: 16  flags: ----  group: x8/rsb
@@ -2175,11 +2174,11 @@ class CPU {
     this.IMEEnabled = false;
 
     // Reset IF bit
-    this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~flag)
+    this.writeByte(CPU.IF_REG, this.readByte(CPU.IF_REG) & ~flag);
   }
 
   updateInterrupts() {
-    let interrupts = this.readByte(CPU.IE_REG) & this.readByte(CPU.IF_REG) & 0x1f;
+    const interrupts = this.readByte(CPU.IE_REG) & this.readByte(CPU.IF_REG) & 0x1f;
 
     if (interrupts) {
       // Resume from halted CPU state
@@ -2208,11 +2207,11 @@ class CPU {
   }
 
   updateTimers() {
-    let tac = this.readByte(CPU.TAC_REG)
+    const tac = this.readByte(CPU.TAC_REG);
 
     if (tac & 0b100) { // Check timer enabled
+      const freq = CPU.TAC_CLOCK_SELECT[tac & 0b11];
       let timer = this.readByte(CPU.TIMA_REG);
-      let freq = CPU.TAC_CLOCK_SELECT[tac & 0b11];
       this.timerCycles += this.cycles;
 
       // TIMA: increment timer and check for overflow

@@ -71,10 +71,10 @@ class DMG {
     this.mmu.writeByte(0xff4b, 0x00);
     this.mmu.writeByte(0xffff, 0x00);
 
-    let AF = 0x01b0;
-    let BC = 0x0013;
-    let DE = 0x00d8;
-    let HL = 0x014d;
+    const AF = 0x01b0;
+    const BC = 0x0013;
+    const DE = 0x00d8;
+    const HL = 0x014d;
 
     this.cpu.A = AF >> 8;
     this.cpu.F = AF & 0xff;
@@ -103,7 +103,7 @@ class DMG {
   nextFrame() {
     let total = 0;
     while (total < this.cyclesPerFrame) {
-      let cycles = this.cpu.update();
+      const cycles = this.cpu.update();
       this.ppu.update(cycles);
       this.apu.update(cycles);
       total += cycles;
@@ -119,11 +119,8 @@ class DMG {
   }
 
   keyPressed(key, state) {
-    let button = DMG.CONTROLS[key.toLowerCase()];
-    if (button === undefined) {
-      return
-    }
-    if (this.started) {
+    const button = DMG.CONTROLS[key.toLowerCase()];
+    if (button && this.started) {
       this.joypad.buttonPressed(button, state);
     }
   }
@@ -133,35 +130,36 @@ class DMG {
 // TODO: Clean up this code
 
 window.createDMG = () => {
-  let screenElem = document.getElementById('screen');
-  let consoleElem = document.getElementById('console');
-  let vvElem = document.getElementById('vramviewer');
-  let mmu = new MMU();
-  let joypad = new Joypad(mmu);
-  let screen = new LCDScreen(screenElem);
-  let ppu = new PPU(mmu, screen);
-  let apu = new APU(mmu);
-  let cpu = new CPU(mmu, apu, joypad);
-  //let vramviewer = new VRAMViewer(vvElem, ppu, mmu);
+  const screenElem = document.getElementById('screen');
+  const consoleElem = document.getElementById('console');
+  const vvElem = document.getElementById('vramviewer');
+  const mmu = new MMU();
+  const joypad = new Joypad(mmu);
+  const screen = new LCDScreen(screenElem);
+  const ppu = new PPU(mmu, screen);
+  const apu = new APU(mmu);
+  const cpu = new CPU(mmu, apu, joypad);
+  //const vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
-}
+};
 
 window.loadRomFromFile = (file) => {
-  let reader = new FileReader();
-  let dmg = window.dmg;
+  const reader = new FileReader();
+  const dmg = window.dmg;
   reader.readAsArrayBuffer(file);
   reader.onload = function() {
     dmg.loadRom(Array.from(new Uint8Array(reader.result)));
     dmg.start();
-  }
-}
+  };
+};
+
 window.setupInputHandlers = () => {
-  let dmg = window.dmg;
+  const dmg = window.dmg;
   document.addEventListener('keydown', (e) => {
     dmg.keyPressed(e.key, true);
   });
   document.addEventListener('keyup', (e) => {
-    dmg.keyPressed(e.key, false)
+    dmg.keyPressed(e.key, false);
   });
 };
 

@@ -2,7 +2,7 @@
 
 function hexify(h) {
   if (h === undefined || h === null) return '(none)';
-  let s = h.toString(16);
+  const s = h.toString(16);
   if (s.length < 2) {
     return '0x0' + h.toString(16);
   }
@@ -15,7 +15,7 @@ function uint16(hi, lo) {
 
 // Two's complement to decimal
 function tcBin2Dec(num) {
-  let neg = num & (1 << 7);
+  const neg = num & (1 << 7);
   if (neg) {
     return num | ~((1 << 7) - 1);
   }
