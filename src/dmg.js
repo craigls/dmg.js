@@ -18,12 +18,11 @@ class DMG {
     "i": "start",
   }
 
-  constructor(cpu, ppu, apu, mmu, screen, joypad, vramviewer) {
+  constructor(cpu, ppu, apu, mmu, screen, joypad) {
     this.cpu = cpu;
     this.ppu = ppu;
     this.apu = apu;
     this.mmu = mmu;
-    this.vramviewer = vramviewer;
     this.screen = screen;
     this.joypad = joypad;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
@@ -110,7 +109,6 @@ class DMG {
     }
     this.cycles += total;
     requestAnimationFrame(() => this.nextFrame());
-    requestAnimationFrame(() => this.vramviewer ? this.vramviewer.update() : null);
   }
 
   update() {
@@ -132,14 +130,12 @@ class DMG {
 window.createDMG = () => {
   const screenElem = document.getElementById('screen');
   const consoleElem = document.getElementById('console');
-  const vvElem = document.getElementById('vramviewer');
   const mmu = new MMU();
   const joypad = new Joypad(mmu);
   const screen = new LCDScreen(screenElem);
   const ppu = new PPU(mmu, screen);
   const apu = new APU(mmu);
   const cpu = new CPU(mmu, apu, joypad);
-  //const vramviewer = new VRAMViewer(vvElem, ppu, mmu);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 };
 

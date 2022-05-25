@@ -2188,8 +2188,7 @@ class CPU {
     if (! this.IMEEnabled) {
       return;
     }
-
-    if (interrupts & CPU.IF_VBLANK) {
+    else if (interrupts & CPU.IF_VBLANK) {
       this.handleInterrupt(CPU.IH_VBLANK, CPU.IF_VBLANK);
     }
     else if (interrupts & CPU.IF_STAT) {
