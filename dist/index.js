@@ -124,9 +124,6 @@ class CPU {
   }
 
   getFlag(f) {
-    if (this.flags[f] === undefined) { // sanity check
-      throw new Error("Invalid flag! " + f);
-    }
     return ((this.F & this.flags[f]) !== 0) ? true : false;
   }
 
@@ -3281,6 +3278,7 @@ window.APU = APU;
 class Channel {
 
   constructor(params) {
+    Object.assign(this, params);
     this.volume = 0;
     this.frequency = 0;
     this.frequencyTimer = 0;
@@ -3404,13 +3402,12 @@ class Square extends Channel {
 
   constructor(params) {
     super(params);
-    Object.assign(this, params);
     this.position = 0;
   }
 
   getAmplitude() {
     const n = this.mmu.readByte(this.r1) >> 6;
-    return this.volume * ((Square.dutyCyclePatterns[n] & (1 << this.position)) & 1);
+    return this.volume * ((Square.dutyCyclePatterns[n] & (1 << this.position)) !== 0 | 0);
   }
 
   update() {
@@ -3427,10 +3424,6 @@ class Square extends Channel {
 
   reset() {
     this.resetTimer();
-    this.position = 0;
-
-    // Reset duty cycle
-    this.mmu.writeByte(this.r1, this.mmu.readByte(this.r1) & ~0xff);
   }
 }
 
@@ -3451,9 +3444,7 @@ class Wavetable extends Channel {
 
   constructor(params) {
     super(params);
-    Object.assign(this, params);
     this.position = 0;
-    this.sample = null;
   }
 
   update() {
@@ -3514,7 +3505,6 @@ class Noise extends Channel {
 
   constructor(params) {
     super(params);
-    Object.assign(this, params);
     this.LFSR = 32767; // 15-bit linear feedback shift register
   }
 

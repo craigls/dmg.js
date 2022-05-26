@@ -88,9 +88,6 @@ class CPU {
   }
 
   getFlag(f) {
-    if (this.flags[f] === undefined) { // sanity check
-      throw new Error("Invalid flag! " + f);
-    }
     return ((this.F & this.flags[f]) !== 0) ? true : false;
   }
 
