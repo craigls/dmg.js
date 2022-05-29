@@ -139,13 +139,14 @@ window.createDMG = () => {
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 };
 
-window.loadRomFromFile = (file) => {
+window.loadRomFromFile = (event, file) => {
   const reader = new FileReader();
   const dmg = window.dmg;
   reader.readAsArrayBuffer(file);
   reader.onload = function() {
     dmg.loadRom(Array.from(new Uint8Array(reader.result)));
     dmg.start();
+    event.target.blur(); // Remove focus after loading
   };
 };
 

@@ -69,6 +69,21 @@ class CPU {
   // Joypad register
   static JOYP_REG = 0xff00;
 
+  // CPU flags
+  static FLAGS = {
+    Z: 128, // zero
+    N: 64,  // subtraction
+    H: 32,  // half carry
+    C: 16,  // carry
+  };
+
+  // Lookup tables used when decoding certain instructions
+  // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
+  static rTable = ["B", "C", "D", "E", "H", "L", null, "A"];
+  static rpTable = ["BC", "DE", "HL", "SP"];
+  static rpTable2 = ["BC", "DE", "HL", "AF"];
+
+
   constructor(mmu, apu, joypad) {
     this.mmu = mmu;
     this.apu = apu;
@@ -90,20 +105,6 @@ class CPU {
     this.IMEEnabled = false;
     this.haltMode = false;
     this.timerCycles = 0;
-
-    this.flags = {
-      Z: 128, // zero
-      N: 64,  // subtraction
-      H: 32,  // half carry
-      C: 16,  // carry
-    };
-
-    // Lookup tables used when decoding certain instructions
-    // https://gb-archive.github.io/salvage/decoding_gbz80_opcodes/Decoding%20Gamboy%20Z80%20Opcodes.html
-    this.r = ["B", "C", "D", "E", "H", "L", null, "A"];
-    this.rp = ["BC", "DE", "HL", "SP"];
-    this.rp2 = ["BC", "DE", "HL", "AF"];
-
   }
 
   reset() {
@@ -111,20 +112,21 @@ class CPU {
     this.cbcode = null;
     this.cycles = 0;
     this.totalCycles = 0;
+    this.timerCycles = 0;
     this.IMEEnabled = false;
     this.haltMode = false;
   }
 
   setFlag(f) {
-    this.F |= this.flags[f];
+    this.F |= CPU.FLAGS[f];
   }
 
   clearFlag(f) {
-    this.F &= ~this.flags[f];
+    this.F &= ~CPU.FLAGS[f];
   }
 
   getFlag(f) {
-    return ((this.F & this.flags[f]) !== 0) ? true : false;
+    return ((this.F & CPU.FLAGS[f]) !== 0) ? true : false;
   }
 
   readByte(loc) {
@@ -1031,7 +1033,7 @@ class CPU {
       case 0x2c: // 0x2c  INC L  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x24: // 0x24  INC H  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
       case 0x3c: // 0x3c  INC A  length: 1  cycles: 4  flags: Z0H-  group: x8/alu
-        r1 = this.r[op.y];
+        r1 = CPU.rTable[op.y];
         this[r1] = this.INC(this[r1]);
         this.cycles += 4;
         break;
@@ -1334,7 +1336,7 @@ class CPU {
       case 0x1d: // 0x1d  DEC E  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
       case 0x25: // 0x25  DEC H  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
       case 0x2d: // 0x2d  DEC L  length: 1  cycles: 4  flags: Z1H-  group: x8/alu
-        r1 = this.r[op.y];
+        r1 = CPU.rTable[op.y];
         this[r1] = this.DEC(this[r1]);
         this.cycles += 4;
         break;
@@ -1363,7 +1365,7 @@ class CPU {
       case 0xa4: // 0xa4  AND H  length: 1  cycles: 4  flags: Z010  group: x8/alu
       case 0xa5: // 0xa5  AND L  length: 1  cycles: 4  flags: Z010  group: x8/alu
       case 0xa7: // 0xa7  AND A  length: 1  cycles: 4  flags: Z010  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.AND(this[r1]);
         this.cycles += 4;
         break;
@@ -1428,7 +1430,7 @@ class CPU {
       case 0xac: // 0xac  XOR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
       case 0xad: // 0xad  XOR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
       case 0xaf: // 0xaf  XOR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.XOR(this[r1]);
         this.cycles += 4;
         break;
@@ -1446,7 +1448,7 @@ class CPU {
       case 0xb4: // 0xb4  OR H  length: 1  cycles: 4  flags: Z000  group: x8/alu
       case 0xb5: // 0xb5  OR L  length: 1  cycles: 4  flags: Z000  group: x8/alu
       case 0xb7: // 0xb7  OR A  length: 1  cycles: 4  flags: Z000  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.OR(this[r1]);
         this.cycles += 4;
         break;
@@ -1470,7 +1472,7 @@ class CPU {
       case 0xbc: // 0xbc  CP H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0xbd: // 0xbd  CP L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0xbf: // 0xbf  CP A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.CP(this[r1]);
         this.cycles += 4;
         break;
@@ -1649,8 +1651,8 @@ class CPU {
       case 0x7c: // 0x7c  LD A,H  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x7d: // 0x7d  LD A,L  length: 1  cycles: 4  flags: ----  group: x8/lsm
       case 0x7f: // 0x7f  LD A,A  length: 1  cycles: 4  flags: ----  group: x8/lsm
-        r1 = this.r[op.y];
-        r2 = this.r[op.z];
+        r1 = CPU.rTable[op.y];
+        r2 = CPU.rTable[op.z];
         this[r1] = this[r2];
         this.cycles += 4;
         break;
@@ -1662,7 +1664,7 @@ class CPU {
       case 0x66: // 0x66  LD H,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x6e: // 0x6e  LD L,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x7e: // 0x7e  LD A,(HL)  length: 1  cycles: 8  flags: ----  group: x8/lsm
-        r1 = this.r[op.y];
+        r1 = CPU.rTable[op.y];
         this[r1] = this.readByte(this.HL());
         this.cycles += 8;
         break;
@@ -1674,7 +1676,7 @@ class CPU {
       case 0x74: // 0x74  LD (HL),H  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x75: // 0x75  LD (HL),L  length: 1  cycles: 8  flags: ----  group: x8/lsm
       case 0x77: // 0x77  LD (HL),A  length: 1  cycles: 8  flags: ----  group: x8/lsm
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.writeByte(this.HL(), this[r1]);
         this.cycles += 8;
         break;
@@ -1686,7 +1688,7 @@ class CPU {
       case 0x84: // 0x84  ADD A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x85: // 0x85  ADD A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x87: // 0x87  ADD A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.ADD(this[r1]);
         this.cycles += 8;
         break;
@@ -1704,7 +1706,7 @@ class CPU {
       case 0x8d: // 0x8d  ADC A,L  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x8f: // 0x8f  ADC A,A  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
       case 0x8c: // 0x8c  ADC A,H  length: 1  cycles: 4  flags: Z0HC  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.ADC(this[r1]);
         this.cycles += 4;
         break;
@@ -1716,7 +1718,7 @@ class CPU {
       case 0x94: // 0x94  SUB H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x95: // 0x95  SUB L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x97: // 0x97  SUB A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.SUB(this[r1]);
         this.cycles += 4;
         break;
@@ -1734,7 +1736,7 @@ class CPU {
       case 0x9c: // 0x9c  SBC A,H  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x9d: // 0x9d  SBC A,L  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
       case 0x9f: // 0x9f  SBC A,A  length: 1  cycles: 4  flags: Z1HC  group: x8/alu
-        r1 = this.r[op.z];
+        r1 = CPU.rTable[op.z];
         this.A = this.SBC(this[r1]);
         this.cycles += 4;
         break;
@@ -1834,7 +1836,7 @@ class CPU {
           case 0x04: // (cb) 0x04  RLC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x05: // (cb) 0x05  RLC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x07: // (cb) 0x07  RLC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.RLC(this[r1]);
             this.cycles += 8;
             break;
@@ -1851,7 +1853,7 @@ class CPU {
           case 0x0c: // (cb) 0x0c  RRC H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x0d: // (cb) 0x0d  RRC L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x0f: // (cb) 0x0f  RRC A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.RRC(this[r1]);
             this.cycles += 8;
             break;
@@ -1868,7 +1870,7 @@ class CPU {
           case 0x14: // (cb) 0x14  RL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x15: // (cb) 0x15  RL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x17: // (cb) 0x17  RL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.RL(this[r1]);
             this.cycles += 8;
             break;
@@ -1886,7 +1888,7 @@ class CPU {
           case 0x1c: // (cb) 0x1c  RR H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x1d: // (cb) 0x1d  RR L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x1f: // (cb) 0x1f  RR A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.RR(this[r1]);
             this.cycles += 8;
             break;
@@ -1904,7 +1906,7 @@ class CPU {
           case 0x24: // (cb) 0x24  SLA H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x25: // (cb) 0x25  SLA L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x27: // (cb) 0x27  SLA A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.SLA(this[r1]);
             this.cycles += 8;
             break;
@@ -1922,7 +1924,7 @@ class CPU {
           case 0x2b: // (cb) 0x2b  SRA E  length: 2  cycles: 8  flags: Z000  group: x8/rsb
           case 0x2c: // (cb) 0x2c  SRA H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
           case 0x2d: // (cb) 0x2d  SRA L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.SRA(this[r1]);
             this.cycles += 8;
             break;
@@ -1989,7 +1991,7 @@ class CPU {
           case 0x7c: // (cb) 0x7c  BIT 7,H  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
           case 0x7d: // (cb) 0x7d  BIT 7,L  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
           case 0x7f: // (cb) 0x7f  BIT 7,A  length: 2  cycles: 8  flags: Z01-  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this.BIT(cbop.y, this[r1]);
             this.cycles += 8;
             break;
@@ -2013,7 +2015,7 @@ class CPU {
           case 0x34: // (cb) 0x34  SWAP H  length: 2  cycles: 8  flags: Z000  group: x8/rsb
           case 0x35: // (cb) 0x35  SWAP L  length: 2  cycles: 8  flags: Z000  group: x8/rsb
           case 0x37: // (cb) 0x37  SWAP A  length: 2  cycles: 8  flags: Z000  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.SWAP(this[r1]);
             this.cycles += 8;
             break;
@@ -2031,14 +2033,14 @@ class CPU {
           case 0x3c: // (cb) 0x3c  SRL H  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x3d: // (cb) 0x3d  SRL L  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
           case 0x3f: // (cb) 0x3f  SRL A  length: 2  cycles: 8  flags: Z00C  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.SRL(this[r1]);
             this.cycles += 8;
             break;
 
           case 0x3e: // (cb) 0x3e  SRL (HL)  length: 2  cycles: 16  flags: Z00C  group: x8/rsb
             this.writeByte(this.HL(), this.SRL(this.readByte(this.HL())));
-            this.cycles += 8;
+            this.cycles += 16;
             break;
 
           case 0x80: // (cb) 0x80  RES 0,B  length: 2  cycles: 8  flags: ----  group: x8/rsb
@@ -2097,7 +2099,7 @@ class CPU {
           case 0xbc: // (cb) 0xbc  RES 7,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbd: // (cb) 0xbd  RES 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xbf: // (cb) 0xbf  RES 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.RES(cbop.y, this[r1]);
             this.cycles += 8;
             break;
@@ -2170,7 +2172,7 @@ class CPU {
           case 0xfc: // (cb) 0xfc  SET 7,H  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xfd: // (cb) 0xfd  SET 7,L  length: 2  cycles: 8  flags: ----  group: x8/rsb
           case 0xff: // (cb) 0xff  SET 7,A  length: 2  cycles: 8  flags: ----  group: x8/rsb
-            r1 = this.r[cbop.z];
+            r1 = CPU.rTable[cbop.z];
             this[r1] = this.SET(cbop.y, this[r1]);
             this.cycles += 8;
             break;
@@ -3770,13 +3772,14 @@ window.createDMG = () => {
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 };
 
-window.loadRomFromFile = (file) => {
+window.loadRomFromFile = (event, file) => {
   const reader = new FileReader();
   const dmg = window.dmg;
   reader.readAsArrayBuffer(file);
   reader.onload = function() {
     dmg.loadRom(Array.from(new Uint8Array(reader.result)));
     dmg.start();
+    event.target.blur(); // Remove focus after loading
   };
 };
 
