@@ -71,7 +71,7 @@ class APU {
       r2: APU.rNR22,
       r3: APU.rNR23,
       r4: APU.rNR24,
-      rDAC: APU.rNR12,
+      rDAC: APU.rNR22,
       rDACmask: 0xf8,
       maxLength: 64,
       mmu: this.mmu,
