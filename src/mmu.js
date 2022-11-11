@@ -17,7 +17,8 @@ class MMU {
    * 0xffff 0xffff: Interrupts Enable Register (IE)
    *
    */
-  constructor(joypad) {
+  constructor(apu) {
+    this.apu = apu;
     this.rom1 = null;
     this.rom2 = null;
     this.ram = null;
@@ -107,7 +108,12 @@ class MMU {
 
     // IO registers
     else if (loc >= 0xff00 && loc <= 0xff7f) {
-      return this.io[loc - 0xff00];
+      if (loc >= APU.startAddress && loc <= APU.endAddress) {
+        return this.apu.readByte(loc);
+      }
+      else {
+        return this.io[loc - 0xff00];
+      }
     }
 
     // High RAM
@@ -140,7 +146,12 @@ class MMU {
 
     // IO registers
     if (loc >= 0xff00 && loc <= 0xff7f) {
-      this.io[loc - 0xff00] = value;
+      if (loc >= APU.startAddress && loc <= APU.endAddress) {
+        this.apu.writeByte(loc, value);
+      }
+      else {
+        this.io[loc - 0xff00] = value;
+      }
     }
 
     // Sprite OAM
@@ -206,7 +217,7 @@ class MMU {
 
   OAMDMATransfer(value) {
     const src = value << 8;
-    for (var n = 0; n < 160; n++) {
+    for (let n = 0; n < 160; n++) {
       this.oam[n] = this.readByte(src + n);
     }
   }

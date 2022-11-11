@@ -130,11 +130,11 @@ class DMG {
 window.createDMG = () => {
   const screenElem = document.getElementById('screen');
   const consoleElem = document.getElementById('console');
-  const mmu = new MMU();
+  const apu = new APU();
+  const mmu = new MMU(apu);
   const joypad = new Joypad(mmu);
   const screen = new LCDScreen(screenElem);
   const ppu = new PPU(mmu, screen);
-  const apu = new APU(mmu);
   const cpu = new CPU(mmu, apu, joypad);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 };

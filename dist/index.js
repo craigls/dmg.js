@@ -138,12 +138,8 @@ class CPU {
   }
 
   writeByte(loc, value) {
-    // Intercept writes to NRx4 register, route to correct channel
-    if (loc >= APU.rNR11 && loc <= APU.rNR52) {
-      return this.apu.writeByte(loc, value);
-    }
     // Route to joypad
-    else if (loc == CPU.JOYP_REG) {
+    if (loc == CPU.JOYP_REG) {
       this.mmu.writeByte(loc, value);
       this.joypad.write(value);
     }
@@ -2298,7 +2294,8 @@ class MMU {
    * 0xffff 0xffff: Interrupts Enable Register (IE)
    *
    */
-  constructor(joypad) {
+  constructor(apu) {
+    this.apu = apu;
     this.rom1 = null;
     this.rom2 = null;
     this.ram = null;
@@ -2388,7 +2385,12 @@ class MMU {
 
     // IO registers
     else if (loc >= 0xff00 && loc <= 0xff7f) {
-      return this.io[loc - 0xff00];
+      if (loc >= APU.startAddress && loc <= APU.endAddress) {
+        return this.apu.readByte(loc);
+      }
+      else {
+        return this.io[loc - 0xff00];
+      }
     }
 
     // High RAM
@@ -2421,7 +2423,12 @@ class MMU {
 
     // IO registers
     if (loc >= 0xff00 && loc <= 0xff7f) {
-      this.io[loc - 0xff00] = value;
+      if (loc >= APU.startAddress && loc <= APU.endAddress) {
+        this.apu.writeByte(loc, value);
+      }
+      else {
+        this.io[loc - 0xff00] = value;
+      }
     }
 
     // Sprite OAM
@@ -2487,7 +2494,7 @@ class MMU {
 
   OAMDMATransfer(value) {
     const src = value << 8;
-    for (var n = 0; n < 160; n++) {
+    for (let n = 0; n < 160; n++) {
       this.oam[n] = this.readByte(src + n);
     }
   }
@@ -2981,9 +2988,10 @@ class APU {
   static envelopeSequence = [0, 0, 0, 0, 0, 0, 0, 1];
   static sweepSequence =    [0, 0, 1, 0, 0, 0, 1, 0];
   static defaultGainAmount = 0.01;
+  static startAddress = 0xff10;
+  static endAddress = 0xff3f;
 
-  constructor(mmu) {
-    this.mmu = mmu;
+  constructor() {
     this.audioContext = new AudioContext();
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);
@@ -2994,6 +3002,7 @@ class APU {
     this.sampleRate = this.audioContext.sampleRate;
     this.samplingInterval = Math.floor(CPU.CLOCK_SPEED / this.sampleRate);
     this.enabled = false;
+    this.registers = new Uint8Array(APU.endAddress - APU.startAddress);
 
     this.square1 = new Square({
       channelId: 0,
@@ -3005,7 +3014,7 @@ class APU {
       rDAC: APU.rNR12,
       rDACmask: 0xf8,
       maxLength: 64,
-      mmu: this.mmu,
+      apu: this,
     });
 
     this.square2 = new Square({
@@ -3017,7 +3026,7 @@ class APU {
       rDAC: APU.rNR22,
       rDACmask: 0xf8,
       maxLength: 64,
-      mmu: this.mmu,
+      apu: this,
     });
 
     this.wave = new Wavetable({
@@ -3029,7 +3038,7 @@ class APU {
       rDAC: APU.rNR30,
       rDACmask: 0x80,
       maxLength: 256,
-      mmu: this.mmu,
+      apu: this,
     });
 
     this.noise = new Noise({
@@ -3041,7 +3050,7 @@ class APU {
       rDAC: APU.rNR42,
       rDACmask: 0xf8,
       maxLength: 64,
-      mmu: this.mmu,
+      apu: this,
     });
 
     this.channels = [
@@ -3115,10 +3124,10 @@ class APU {
       }
       // Sum audio from each channel, write to buffer
       if (this.cycles % this.samplingInterval === 0) {
-        // Get values of volume control, panning and channel status registers
-        const control = this.mmu.readByte(APU.rNR50);
-        const statuses = this.mmu.readByte(APU.rNR52);
-        const panning = this.mmu.readByte(APU.rNR51);
+        // Get values of volume control, panning and channel status
+        const control = this.readByte(APU.rNR50);
+        const statuses = this.readByte(APU.rNR52);
+        const panning = this.readByte(APU.rNR51);
 
         let volumeLeft = 0;
         let volumeRight = 0;
@@ -3164,10 +3173,11 @@ class APU {
       this.cycles++;
     }
   }
+  readByte(loc, value) {
+    return this.registers[loc - APU.startAddress];
+  }
 
   writeByte(loc, value) {
-    // Write new value to register first to avoid race conditions
-    this.mmu.writeByte(loc, value);
 
     // Route NRxx writes to correct channel
     switch (loc) {
@@ -3201,7 +3211,7 @@ class APU {
         break;
 
       default:
-        // Do nothing
+        this.registers[loc - APU.startAddress] = value;
         break;
     }
     return value;
@@ -3212,9 +3222,11 @@ class APU {
     // Update length counter
     if (loc === channel.r1) {
       channel.lengthCounter = channel.maxLength - (value & (channel.maxLength - 1));
+      this.registers[loc - APU.startAddress] = value;
     }
     // Recieved DAC disable
     else if (loc === channel.rDAC && (value & channel.rDACmask) == 0) {
+      this.registers[loc - APU.startAddress] = value;
       channel.disable();
     }
     else if (loc == channel.r4) {
@@ -3223,14 +3235,22 @@ class APU {
 
       // Trigger channel
       if (value & 0x80) {
+        value &= ~0x80;
+
         // Trigger channel
         this.channelTrigger(channel);
 
+        // TODO: This is probably wrong?
         // If DAC is off then disable channel immediately
-        if ((this.mmu.readByte(APU.rNR52) & 0x80) === 0) {
+        if ((this.readByte(APU.rNR52) & 0x80) === 0) {
           channel.disable();
         }
       }
+      // Mask out channel trigger bit as it's read-only
+      this.registers[loc - APU.startAddress] = value;
+    }
+    else {
+      this.registers[loc - APU.startAddress] = value;
     }
   }
 
@@ -3243,14 +3263,14 @@ class APU {
 
     // Set channel volume to initial envelope volume
     // and volume envelope timer to period
-    const value = this.mmu.readByte(channel.r2);
+    const value = this.readByte(channel.r2);
     channel.volume = value >> 4;
     channel.envelopeTimer = value & 0x7;
     channel.reset();
 
     // Update sweep (channel 0 only)
     if (channel.channelId === 0) {
-      const value = this.mmu.readByte(channel.r0);
+      const value = this.readByte(channel.r0);
       const period = (value & 0x70) >> 4;
       const shift = value & 0x7;
       channel.sweepTimer = period || 8; // set to 8 if period is zero (why?)
@@ -3268,11 +3288,9 @@ class APU {
     }
 
     // Set channel status flag to ON
-    const statuses = this.mmu.readByte(APU.rNR52);
-    this.mmu.writeByte(APU.rNR52, statuses | (1 << channel.channelId));
-
+    const statuses = this.readByte(APU.rNR52);
+    this.registers[APU.rNR52 - APU.startAddress] = statuses | (1 << channel.channelId);
   }
-
 }
 
 window.APU = APU;
@@ -3314,7 +3332,7 @@ class Channel {
 
   // Volume envelope timer
   clockEnvelope() {
-    const value = this.mmu.readByte(this.r2);
+    const value = this.apu.readByte(this.r2);
     const increase = (value & 0x8) !== 0;
     const period = value & 0x7;
 
@@ -3339,7 +3357,7 @@ class Channel {
       this.sweepTimer--;
 
       if (this.sweepTimer === 0) {
-        const value = this.mmu.readByte(this.r0);
+        const value = this.apu.readByte(this.r0);
         const shift = value & 0x7;
         const period = (value & 0x70) >> 4;
 
@@ -3355,8 +3373,8 @@ class Channel {
             const msb = newFrequency >> 8 & 0x7;
             const lsb = newFrequency & 0xff;
 
-            this.mmu.writeByte(this.r3, lsb);
-            this.mmu.writeByte(this.r4, this.mmu.readByte(this.r4) & ~0x7 | msb);
+            this.apu.writeByte(this.r3, lsb);
+            this.apu.writeByte(this.r4, this.apu.readByte(this.r4) & ~0x7 | msb);
 
             this.calcSweepFrequency();
           }
@@ -3368,7 +3386,7 @@ class Channel {
   }
 
   calcSweepFrequency() {
-    const value = this.mmu.readByte(this.r0);
+    const value = this.apu.readByte(this.r0);
     const negate = (value & 0x8) !== 0;
     const shift = value & 0x7;
     let newFrequency = this.shadowFrequency >> shift;
@@ -3387,8 +3405,8 @@ class Channel {
 
   // WRite to channel status register, disable channel
   disable() {
-    const statuses = this.mmu.readByte(APU.rNR52);
-    this.mmu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
+    const statuses = this.apu.readByte(APU.rNR52);
+    this.apu.writeByte(APU.rNR52, statuses & ~(1 << this.channelId));
     this.enabled = false;
   }
 
@@ -3408,7 +3426,7 @@ class Square extends Channel {
   }
 
   getAmplitude() {
-    const n = this.mmu.readByte(this.r1) >> 6;
+    const n = this.apu.readByte(this.r1) >> 6;
     return this.volume * ((Square.dutyCyclePatterns[n] & (1 << this.position)) !== 0 | 0);
   }
 
@@ -3418,8 +3436,8 @@ class Square extends Channel {
 
   resetTimer() {
     this.frequency = uint16(
-      this.mmu.readByte(this.r4) & 0x7,
-      this.mmu.readByte(this.r3)
+      this.apu.readByte(this.r4) & 0x7,
+      this.apu.readByte(this.r3)
     );
     this.frequencyTimer = (2048 - this.frequency) * 4;
   }
@@ -3454,23 +3472,23 @@ class Wavetable extends Channel {
   }
 
   getAmplitude() {
-    const shift = Wavetable.volumeShiftRight[this.mmu.readByte(this.r2) >> 5];
+    const shift = Wavetable.volumeShiftRight[this.apu.readByte(this.r2) >> 5];
     const address = Wavetable.baseAddress + Math.floor(this.position / 2);
     let sample = 0;
 
     if (this.position % 2 === 0) {
-      sample = this.mmu.readByte(address) >> 4;
+      sample = this.apu.readByte(address) >> 4;
     }
     else {
-      sample = this.mmu.readByte(address) & 0x0f;
+      sample = this.apu.readByte(address) & 0x0f;
     }
     return sample >> shift;
   }
 
   resetTimer() {
     this.frequency = uint16(
-      this.mmu.readByte(this.r4) & 0x7,
-      this.mmu.readByte(this.r3)
+      this.apu.readByte(this.r4) & 0x7,
+      this.apu.readByte(this.r3)
     );
     this.frequencyTimer = (2048 - this.frequency) * 2;
   }
@@ -3511,7 +3529,7 @@ class Noise extends Channel {
   }
 
   update() {
-    const value = this.mmu.readByte(this.r3);
+    const value = this.apu.readByte(this.r3);
     const width = (value & 0x8) !== 0;
 
     // XOR lower two bits together
@@ -3529,7 +3547,7 @@ class Noise extends Channel {
   }
 
   resetTimer() {
-    const value = this.mmu.readByte(this.r3);
+    const value = this.apu.readByte(this.r3);
     const shift = value >> 4;
     const divisor = Noise.divisorCodes[value & 0x7];
     this.frequencyTimer = divisor << shift;
@@ -3763,11 +3781,11 @@ class DMG {
 window.createDMG = () => {
   const screenElem = document.getElementById('screen');
   const consoleElem = document.getElementById('console');
-  const mmu = new MMU();
+  const apu = new APU();
+  const mmu = new MMU(apu);
   const joypad = new Joypad(mmu);
   const screen = new LCDScreen(screenElem);
   const ppu = new PPU(mmu, screen);
-  const apu = new APU(mmu);
   const cpu = new CPU(mmu, apu, joypad);
   return new DMG(cpu, ppu, apu, mmu, screen, joypad);
 };
@@ -3799,4 +3817,4 @@ window.onload = () => {
 };
 
 
-})(window);
+})();
