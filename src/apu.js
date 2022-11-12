@@ -274,7 +274,7 @@ class APU {
     }
     // Recieved DAC disable
     else if (loc === channel.rDAC && (value & channel.rDACmask) == 0) {
-      this.mmu.io[loc - 0xff0] = value;
+      this.mmu.io[loc - 0xff00] = value;
       channel.disable();
     }
     else if (loc == channel.r4) {

@@ -159,7 +159,8 @@ class MMU {
       this.joypad.write(value);
     }
     else if (loc >= 0xff00 && loc <= 0xff7f) {
-      if (loc >= APU.startAddress && loc <= APU.endAddress) {
+      // Route to APU channels
+      if (loc >= APU.rNR10 && loc <= APU.rNR44) {
         this.apu.writeByte(loc, value);
       }
       else {
