@@ -95,6 +95,7 @@ class DMG {
   }
 
   start() {
+    console.log('Started.');
     this.started = true;
     // Start main emulation loop
     this.update();
@@ -147,6 +148,7 @@ window.loadRomFromFile = (event, file) => {
   const reader = new FileReader();
   const dmg = window.dmg;
   reader.readAsArrayBuffer(file);
+  console.log(file.name + ' is loading...');
   reader.onload = function() {
     dmg.loadRom(Array.from(new Uint8Array(reader.result)));
     dmg.start();
