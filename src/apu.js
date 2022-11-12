@@ -38,10 +38,9 @@ class APU {
   static envelopeSequence = [0, 0, 0, 0, 0, 0, 0, 1];
   static sweepSequence =    [0, 0, 1, 0, 0, 0, 1, 0];
   static defaultGainAmount = 0.01;
-  static startAddress = 0xff10;
-  static endAddress = 0xff3f;
 
   constructor(dmg) {
+    this.dmg = dmg;
     this.audioContext = new AudioContext();
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);
@@ -52,8 +51,6 @@ class APU {
     this.sampleRate = this.audioContext.sampleRate;
     this.samplingInterval = Math.floor(CPU.CLOCK_SPEED / this.sampleRate);
     this.enabled = false;
-    this.registers = new Uint8Array(APU.endAddress - APU.startAddress);
-
     this.square1 = new Square({
       channelId: 0,
       r0: APU.rNR10,
@@ -112,6 +109,7 @@ class APU {
   }
 
   reset() {
+    this.mmu = this.dmg.mmu;
     this.cycles = 0;
     this.currentFrame = 0;
     this.audioQueue = [];
@@ -224,7 +222,7 @@ class APU {
     }
   }
   readByte(loc, value) {
-    return this.registers[loc - APU.startAddress];
+    return this.mmu.io[loc - 0xff00];
   }
 
   writeByte(loc, value) {
@@ -261,7 +259,7 @@ class APU {
         break;
 
       default:
-        this.registers[loc - APU.startAddress] = value;
+        this.mmu.io[loc - 0xff00] = value;
         break;
     }
     return value;
@@ -272,11 +270,11 @@ class APU {
     // Update length counter
     if (loc === channel.r1) {
       channel.lengthCounter = channel.maxLength - (value & (channel.maxLength - 1));
-      this.registers[loc - APU.startAddress] = value;
+      this.mmu.io[loc - 0xff00] = value;
     }
     // Recieved DAC disable
     else if (loc === channel.rDAC && (value & channel.rDACmask) == 0) {
-      this.registers[loc - APU.startAddress] = value;
+      this.mmu.io[loc - 0xff0] = value;
       channel.disable();
     }
     else if (loc == channel.r4) {
@@ -297,10 +295,10 @@ class APU {
         }
       }
       // Mask out channel trigger bit as it's read-only
-      this.registers[loc - APU.startAddress] = value;
+      this.mmu.io[loc - 0xff00] = value;
     }
     else {
-      this.registers[loc - APU.startAddress] = value;
+      this.mmu.io[loc - 0xff00] = value;
     }
   }
 
@@ -339,7 +337,7 @@ class APU {
 
     // Set channel status flag to ON
     const statuses = this.readByte(APU.rNR52);
-    this.registers[APU.rNR52 - APU.startAddress] = statuses | (1 << channel.channelId);
+    this.mmu.io[APU.rNR52 - 0xff00] = statuses | (1 << channel.channelId);
   }
 }
 
