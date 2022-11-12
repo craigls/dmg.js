@@ -30,9 +30,6 @@ class CPU {
   static TAC_REG = 0xff07; // Timer control
   static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
-  // Joypad register
-  static JOYP_REG = 0xff00;
-
   // CPU flags
   static FLAGS = {
     Z: 128, // zero
@@ -48,10 +45,9 @@ class CPU {
   static rpTable2 = ["BC", "DE", "HL", "AF"];
 
 
-  constructor(mmu, apu, joypad) {
-    this.mmu = mmu;
-    this.apu = apu;
-    this.joypad = joypad;
+  constructor(dmg) {
+    this.dmg = dmg;
+    this.joypad = null;
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -72,6 +68,8 @@ class CPU {
   }
 
   reset() {
+    this.mmu = this.dmg.mmu;
+    this.joypad = this.dmg.joypad;
     this.code = null;
     this.cbcode = null;
     this.cycles = 0;
@@ -94,21 +92,12 @@ class CPU {
   }
 
   readByte(loc) {
-    // Route to joypad
-    if (loc == CPU.JOYP_REG) {
-      return this.joypad.read();
-    }
     return this.mmu.readByte(loc);
   }
 
   writeByte(loc, value) {
-    // Route to joypad
-    if (loc == CPU.JOYP_REG) {
-      this.mmu.writeByte(loc, value);
-      this.joypad.write(value);
-    }
     // DMA Transfer
-    else if (loc == CPU.OAM_DMA_REG) {
+    if (loc == CPU.OAM_DMA_REG) {
       this.mmu.writeByte(loc, value);
       this.mmu.OAMDMATransfer(value);
       this.cycles += 160; // DMA Transfer takes 160 cycles

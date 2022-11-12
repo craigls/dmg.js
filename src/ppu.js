@@ -74,9 +74,8 @@ class PPU {
    *
    */
 
-  constructor(mmu, screen) {
-    this.mmu = mmu;
-    this.screen = screen;
+  constructor(dmg) {
+    this.dmg = dmg;
     this.tileData = new Uint8Array(16);
     this.spriteData = new Uint8Array(32);
     this.spriteHeight = 8;
@@ -101,6 +100,8 @@ class PPU {
   }
 
   reset() {
+    this.screen = this.dmg.screen;
+    this.mmu = this.dmg.mmu;
     this.x = 0;
     this.y = 0;
     this.frameBuf = new ImageData(PPU.VIEWPORT_WIDTH, PPU.VIEWPORT_HEIGHT);

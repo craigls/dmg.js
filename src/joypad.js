@@ -15,12 +15,16 @@ class Joypad {
     "start"   : [1, 8],
   }
 
-  constructor(mmu) {
+  constructor(dmg) {
     // store dpad and action button values in array
     // 0xf = no buttons pressed
+    this.dmg = dmg;
     this.buttons = [0xf, 0xf];
     this.select = 0; // Used to switch between dpad/action buttons
-    this.mmu = mmu;
+  }
+
+  reset() {
+    this.mmu = this.dmg.mmu;
   }
 
   // Register a button event (0 = pressed)

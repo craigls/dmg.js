@@ -41,7 +41,7 @@ class APU {
   static startAddress = 0xff10;
   static endAddress = 0xff3f;
 
-  constructor() {
+  constructor(dmg) {
     this.audioContext = new AudioContext();
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);

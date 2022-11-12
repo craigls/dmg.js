@@ -18,13 +18,14 @@ class DMG {
     "i": "start",
   }
 
-  constructor(cpu, ppu, apu, mmu, screen, joypad) {
-    this.cpu = cpu;
-    this.ppu = ppu;
-    this.apu = apu;
-    this.mmu = mmu;
-    this.screen = screen;
-    this.joypad = joypad;
+  constructor() {
+    this.cpu = null;
+    this.ppu = null;
+    this.apu = null;
+    this.mmu = null;
+    this.screen = null;
+    this.joypad = null;
+    this.screen = null;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
   }
@@ -37,6 +38,7 @@ class DMG {
     this.screen.reset();
     this.mmu.reset();
     this.apu.reset();
+    this.joypad.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
 
@@ -128,15 +130,17 @@ class DMG {
 // TODO: Clean up this code
 
 window.createDMG = () => {
+
+  const dmg = new DMG();
   const screenElem = document.getElementById('screen');
-  const consoleElem = document.getElementById('console');
-  const apu = new APU();
-  const mmu = new MMU(apu);
-  const joypad = new Joypad(mmu);
-  const screen = new LCDScreen(screenElem);
-  const ppu = new PPU(mmu, screen);
-  const cpu = new CPU(mmu, apu, joypad);
-  return new DMG(cpu, ppu, apu, mmu, screen, joypad);
+
+  dmg.screen = new LCDScreen(screenElem);
+  dmg.joypad = new Joypad(dmg);
+  dmg.cpu = new CPU(dmg);
+  dmg.ppu = new PPU(dmg);
+  dmg.apu = new APU(dmg);
+  dmg.mmu = new MMU(dmg);
+  return dmg;
 };
 
 window.loadRomFromFile = (event, file) => {

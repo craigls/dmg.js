@@ -17,8 +17,12 @@ class MMU {
    * 0xffff 0xffff: Interrupts Enable Register (IE)
    *
    */
-  constructor(apu) {
-    this.apu = apu;
+
+  // Joypad register
+  static JOYP_REG = 0xff00;
+
+  constructor(dmg) {
+    this.dmg = dmg;
     this.rom1 = null;
     this.rom2 = null;
     this.ram = null;
@@ -37,6 +41,8 @@ class MMU {
   }
 
   reset() {
+    this.apu = this.dmg.apu;
+    this.joypad = this.dmg.joypad;
     this.ram = new Uint8Array(32 * 1024);
     this.vram = new Uint8Array(8 * 1024);
     this.xram = new Uint8Array(8 * 1024);
@@ -107,6 +113,10 @@ class MMU {
     }
 
     // IO registers
+    else if (loc == MMU.JOYP_REG) {
+      return this.joypad.read();
+    }
+
     else if (loc >= 0xff00 && loc <= 0xff7f) {
       if (loc >= APU.startAddress && loc <= APU.endAddress) {
         return this.apu.readByte(loc);
@@ -145,7 +155,10 @@ class MMU {
     // Note: Ordering of if/else blocks matters here
 
     // IO registers
-    if (loc >= 0xff00 && loc <= 0xff7f) {
+    if (loc == MMU.JOYP_REG) {
+      this.joypad.write(value);
+    }
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
       if (loc >= APU.startAddress && loc <= APU.endAddress) {
         this.apu.writeByte(loc, value);
       }

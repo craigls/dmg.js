@@ -66,9 +66,6 @@ class CPU {
   static TAC_REG = 0xff07; // Timer control
   static TAC_CLOCK_SELECT = [1024, 16, 64, 256]; // = CPU clock / (clock select)
 
-  // Joypad register
-  static JOYP_REG = 0xff00;
-
   // CPU flags
   static FLAGS = {
     Z: 128, // zero
@@ -84,10 +81,9 @@ class CPU {
   static rpTable2 = ["BC", "DE", "HL", "AF"];
 
 
-  constructor(mmu, apu, joypad) {
-    this.mmu = mmu;
-    this.apu = apu;
-    this.joypad = joypad;
+  constructor(dmg) {
+    this.dmg = dmg;
+    this.joypad = null;
     this.A = 0;
     this.B = 0;
     this.C = 0;
@@ -108,6 +104,8 @@ class CPU {
   }
 
   reset() {
+    this.mmu = this.dmg.mmu;
+    this.joypad = this.dmg.joypad;
     this.code = null;
     this.cbcode = null;
     this.cycles = 0;
@@ -130,21 +128,12 @@ class CPU {
   }
 
   readByte(loc) {
-    // Route to joypad
-    if (loc == CPU.JOYP_REG) {
-      return this.joypad.read();
-    }
     return this.mmu.readByte(loc);
   }
 
   writeByte(loc, value) {
-    // Route to joypad
-    if (loc == CPU.JOYP_REG) {
-      this.mmu.writeByte(loc, value);
-      this.joypad.write(value);
-    }
     // DMA Transfer
-    else if (loc == CPU.OAM_DMA_REG) {
+    if (loc == CPU.OAM_DMA_REG) {
       this.mmu.writeByte(loc, value);
       this.mmu.OAMDMATransfer(value);
       this.cycles += 160; // DMA Transfer takes 160 cycles
@@ -2294,8 +2283,12 @@ class MMU {
    * 0xffff 0xffff: Interrupts Enable Register (IE)
    *
    */
-  constructor(apu) {
-    this.apu = apu;
+
+  // Joypad register
+  static JOYP_REG = 0xff00;
+
+  constructor(dmg) {
+    this.dmg = dmg;
     this.rom1 = null;
     this.rom2 = null;
     this.ram = null;
@@ -2314,6 +2307,8 @@ class MMU {
   }
 
   reset() {
+    this.apu = this.dmg.apu;
+    this.joypad = this.dmg.joypad;
     this.ram = new Uint8Array(32 * 1024);
     this.vram = new Uint8Array(8 * 1024);
     this.xram = new Uint8Array(8 * 1024);
@@ -2384,6 +2379,10 @@ class MMU {
     }
 
     // IO registers
+    else if (loc == MMU.JOYP_REG) {
+      return this.joypad.read();
+    }
+
     else if (loc >= 0xff00 && loc <= 0xff7f) {
       if (loc >= APU.startAddress && loc <= APU.endAddress) {
         return this.apu.readByte(loc);
@@ -2422,7 +2421,10 @@ class MMU {
     // Note: Ordering of if/else blocks matters here
 
     // IO registers
-    if (loc >= 0xff00 && loc <= 0xff7f) {
+    if (loc == MMU.JOYP_REG) {
+      this.joypad.write(value);
+    }
+    else if (loc >= 0xff00 && loc <= 0xff7f) {
       if (loc >= APU.startAddress && loc <= APU.endAddress) {
         this.apu.writeByte(loc, value);
       }
@@ -2576,9 +2578,8 @@ class PPU {
    *
    */
 
-  constructor(mmu, screen) {
-    this.mmu = mmu;
-    this.screen = screen;
+  constructor(dmg) {
+    this.dmg = dmg;
     this.tileData = new Uint8Array(16);
     this.spriteData = new Uint8Array(32);
     this.spriteHeight = 8;
@@ -2603,6 +2604,8 @@ class PPU {
   }
 
   reset() {
+    this.screen = this.dmg.screen;
+    this.mmu = this.dmg.mmu;
     this.x = 0;
     this.y = 0;
     this.frameBuf = new ImageData(PPU.VIEWPORT_WIDTH, PPU.VIEWPORT_HEIGHT);
@@ -2991,7 +2994,7 @@ class APU {
   static startAddress = 0xff10;
   static endAddress = 0xff3f;
 
-  constructor() {
+  constructor(dmg) {
     this.audioContext = new AudioContext();
     this.sampleLeft = new Array(APU.frameCount);
     this.sampleRight = new Array(APU.frameCount);
@@ -3602,12 +3605,16 @@ class Joypad {
     "start"   : [1, 8],
   }
 
-  constructor(mmu) {
+  constructor(dmg) {
     // store dpad and action button values in array
     // 0xf = no buttons pressed
+    this.dmg = dmg;
     this.buttons = [0xf, 0xf];
     this.select = 0; // Used to switch between dpad/action buttons
-    this.mmu = mmu;
+  }
+
+  reset() {
+    this.mmu = this.dmg.mmu;
   }
 
   // Register a button event (0 = pressed)
@@ -3669,13 +3676,14 @@ class DMG {
     "i": "start",
   }
 
-  constructor(cpu, ppu, apu, mmu, screen, joypad) {
-    this.cpu = cpu;
-    this.ppu = ppu;
-    this.apu = apu;
-    this.mmu = mmu;
-    this.screen = screen;
-    this.joypad = joypad;
+  constructor() {
+    this.cpu = null;
+    this.ppu = null;
+    this.apu = null;
+    this.mmu = null;
+    this.screen = null;
+    this.joypad = null;
+    this.screen = null;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
   }
@@ -3688,6 +3696,7 @@ class DMG {
     this.screen.reset();
     this.mmu.reset();
     this.apu.reset();
+    this.joypad.reset();
 
     // Set default state per https://gbdev.io/pandocs/Power_Up_Sequence.html
 
@@ -3779,15 +3788,17 @@ class DMG {
 // TODO: Clean up this code
 
 window.createDMG = () => {
+
+  const dmg = new DMG();
   const screenElem = document.getElementById('screen');
-  const consoleElem = document.getElementById('console');
-  const apu = new APU();
-  const mmu = new MMU(apu);
-  const joypad = new Joypad(mmu);
-  const screen = new LCDScreen(screenElem);
-  const ppu = new PPU(mmu, screen);
-  const cpu = new CPU(mmu, apu, joypad);
-  return new DMG(cpu, ppu, apu, mmu, screen, joypad);
+
+  dmg.screen = new LCDScreen(screenElem);
+  dmg.joypad = new Joypad(dmg);
+  dmg.cpu = new CPU(dmg);
+  dmg.ppu = new PPU(dmg);
+  dmg.apu = new APU(dmg);
+  dmg.mmu = new MMU(dmg);
+  return dmg;
 };
 
 window.loadRomFromFile = (event, file) => {
