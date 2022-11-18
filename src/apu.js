@@ -32,7 +32,7 @@ class APU {
   static rNR51 = 0xff25; // Left enables, Right enables
   static rNR52 = 0xff26; // Power control/status, Channel length statuses
 
-  static frameCount = 1024;
+  static frameCount = 512;
   static frameSequencerRate = 8192;
   static lengthSequence =   [1, 0, 1, 0, 1, 0, 1, 0];
   static envelopeSequence = [0, 0, 0, 0, 0, 0, 0, 1];
@@ -283,7 +283,9 @@ class APU {
 
       // Trigger channel
       if (value & 0x80) {
+        // Mask out channel trigger bit as it's read-only
         value &= ~0x80;
+        this.mmu.io[loc - 0xff00] = value;
 
         // Trigger channel
         this.channelTrigger(channel);
@@ -294,8 +296,9 @@ class APU {
           channel.disable();
         }
       }
-      // Mask out channel trigger bit as it's read-only
-      this.mmu.io[loc - 0xff00] = value;
+      else {
+        this.mmu.io[loc - 0xff00] = value;
+      }
     }
     else {
       this.mmu.io[loc - 0xff00] = value;
