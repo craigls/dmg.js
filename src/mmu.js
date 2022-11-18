@@ -118,12 +118,7 @@ class MMU {
     }
 
     else if (loc >= 0xff00 && loc <= 0xff7f) {
-      if (loc >= APU.startAddress && loc <= APU.endAddress) {
-        return this.apu.readByte(loc);
-      }
-      else {
-        return this.io[loc - 0xff00];
-      }
+      return this.io[loc - 0xff00];
     }
 
     // High RAM

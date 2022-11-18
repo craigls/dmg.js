@@ -2384,12 +2384,7 @@ class MMU {
     }
 
     else if (loc >= 0xff00 && loc <= 0xff7f) {
-      if (loc >= APU.startAddress && loc <= APU.endAddress) {
-        return this.apu.readByte(loc);
-      }
-      else {
-        return this.io[loc - 0xff00];
-      }
+      return this.io[loc - 0xff00];
     }
 
     // High RAM
@@ -3237,7 +3232,9 @@ class APU {
 
       // Trigger channel
       if (value & 0x80) {
+        // Mask out channel trigger bit as it's read-only
         value &= ~0x80;
+        this.mmu.io[loc - 0xff00] = value;
 
         // Trigger channel
         this.channelTrigger(channel);
@@ -3248,8 +3245,9 @@ class APU {
           channel.disable();
         }
       }
-      // Mask out channel trigger bit as it's read-only
-      this.mmu.io[loc - 0xff00] = value;
+      else {
+        this.mmu.io[loc - 0xff00] = value;
+      }
     }
     else {
       this.mmu.io[loc - 0xff00] = value;
