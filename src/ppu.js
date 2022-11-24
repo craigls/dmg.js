@@ -314,11 +314,25 @@ class PPU {
     const tile = this.getTileData(tileIndex);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
+    let rgb;
 
     // Save color id of pixel x, y for bg/obj priority when rendering sprites
     this.bgColorId = this.getPixelColor(tile, tileX, tileY);
 
-    const rgb = this.getColorRGB(this.bgColorId, this.BGP);
+    if (this.dmg.cgbMode) {
+      const addr = this.readByte(MMU.BCPD_BGPD);
+      const palette = uint16(this.mmu.cgbram[addr + 1], this.mmu.cgbram[addr]);
+
+      // Each color value uses 5 bits
+      rgb = [
+        palette & 0x1f, // red
+        palette & (0x1f >> 5), // green
+        palette & (0x1f >> 10), // blue
+      ];
+    }
+    else {
+      rgb = this.getColorRGB(this.bgColorId, this.BGP);
+    }
     this.drawPixel(x, y, rgb);
   }
 
@@ -446,3 +460,4 @@ class PPU {
     data[offset + 3] = 255; // alpha
   }
 }
+window.PPU = PPU;
