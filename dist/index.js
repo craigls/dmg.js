@@ -2329,26 +2329,26 @@ class MMU {
 
   constructor(dmg) {
     this.dmg = dmg;
-    this.rom1 = null;
-    this.rom2 = null;
+    this.rom = null;
     this.hram = null;
     this.vram = null;
     this.vram1 = null;
     this.vram2 = null;
     this.xram = null;
     this.wram = null;
-    this.wramOffset = 0;
-
     this.oam = null;
     this.io = null;
     this.ie = null;
     this.mbcType = null;
-    this.romBankNum1 = null;
-    this.romBankNum2 = null;
-    this.romBankNum1 = null;
-    this.bankMode = null;
+    this.ramOffset1 = null;
+    this.ramOffset2 = null;
+    this.wramOffset = null;
+    this.xramOffset = 0;
     this.xramEnabled = false;
+    this.bankMode = null;
     this.cgbram = null;
+    this.romSize = 0;
+    this.ramSize = 0;
   }
 
   reset() {
@@ -2365,16 +2365,42 @@ class MMU {
     this.io = new Uint8Array(128);
     this.ie = 0;
     this.mbcType = 0;
-    this.romBankNum1 = 1;
-    this.romBankNum2 = 0;
-    this.ramBankNum1 = 0;
-    this.bankMode = 0;
+    this.romOffset1 = 0;
+    this.romOffset2 = 0;
+    this.wramOffset = 0;
+    this.xramOffset = 0;
     this.xramEnabled = false;
+    this.bankMode = 0;
     this.cgbram = new Uint8Array(64);
   }
 
   loadRom(rom) {
     const header = this.readHeader(rom);
+
+    // Determine ROM and RAM sizes (KiB)
+    this.romSize = 32 * (1 << header.ramSize);
+
+    switch (header.ramSize) {
+      case 0x00:
+      case 0x01: // unused
+        this.ramSize = 0;
+        break;
+      case 0x02:
+        this.ramSize = 8;
+        break;
+      case 0x03:
+        this.ramSize = 32;
+        break;
+      case 0x04:
+        this.ramSize = 128;
+        break;
+      case 0x05:
+        this.ramSize = 64;
+        break;
+      default:
+        console.warning("Can't determine RAM size from header");
+        break;
+    }
 
     // 0x014b set to 0x33 indicates new license
     const newLicense = rom[0x014b] === 0x33;
@@ -2382,7 +2408,7 @@ class MMU {
     // Read CGB flag if new license
     if (newLicense) {
       if (header.cgb === MMU.CGB_COMPAT || header.cgb === MMU.CGB_ONLY) {
-        this.dmg.cgbMode = true;
+        this.dmg.cgbMode = false;
       }
     }
 
@@ -2409,8 +2435,7 @@ class MMU {
         this.mbcType = MMU.MBC1;
         break;
     }
-    this.rom1 = new Uint8Array(rom.slice(0, 16 * 1024));
-    this.rom2 = new Uint8Array(rom.slice(16 * 1024));
+    this.rom = new Uint8Array(rom);
   }
 
   readHeader(rom) {
@@ -2422,7 +2447,7 @@ class MMU {
       mbc: rom[0x0147],
       romSize: rom[0x0148],
       ramSize: rom[0x0148],
-      dest: rom[0x014a],
+      region: rom[0x014a],
       license: rom[0x014b],
       ver: rom[0x014c],
       checksum1: rom[0x014d],
@@ -2431,22 +2456,22 @@ class MMU {
   }
 
   readByte(loc) {
-    // ROM 1
+    // ROM bank 00
     if (loc >= 0x0000 && loc <= 0x3fff) {
-      return this.rom1[loc];
+      return this.rom[loc];
     }
 
-    // ROM 2
+    // ROM bank 00-NN
     else if (loc >= 0x4000 && loc <= 0x7fff) {
       // Memory bank switching is a work in progress!
       if (this.mbcType == MMU.MBC1) {
-        return this.rom2[(loc - 0x4000) + (16384 * ((this.romBankNum2 << 5) + this.romBankNum1 - 1))];
+        return this.rom[this.romOffset1 + this.romOffset2 + loc];
       }
       else if (this.mbcType == MMU.MBC5) {
-        return this.rom2[(loc - 0x4000 - 16384) + (16384 * uint16(this.romBankNum2 & 1, this.romBankNum1))];
+        return this.rom[this.romOffset1 + this.romOffset2 + loc];
       }
       else {
-        return this.rom2[loc - 0x4000];
+        return this.rom[loc];
       }
     }
 
@@ -2458,7 +2483,7 @@ class MMU {
     // Ext. RAM
     else if (loc >= 0xa000 && loc <= 0xbfff) {
       if (this.xramEnabled) {
-        return this.xram[(loc - 0xa000) + (16384 * this.ramBankNum1 - 1)];
+        return this.xram[(loc - 0xa000) + this.xramOffset];
       }
     }
 
@@ -2497,7 +2522,7 @@ class MMU {
     }
 
     else {
-      // console.warn("Invalid memory address: " + loc);
+      console.warn("Invalid memory address: " + loc);
     }
   }
 
@@ -2517,13 +2542,13 @@ class MMU {
         this.VRAMDMATransfer(value);
       }
 
-      else if (this.cgbMode && loc == MMU.SVBK) {
+      else if (this.dmg.cgbMode && loc == MMU.SVBK) {
         this.wramOffset = value * 4096;
       }
 
-      else if (this.cgbMode && loc == MMU.VBK) {
+      else if (this.dmg.cgbMode && loc == MMU.VBK) {
         // CGB only - Use VRAM2 bank if bit 0 set;
-        if (this.dmg.cgbMode && (value & 0x1)) {
+        if (this.dmg.dmg.cgbMode && (value & 0x1)) {
           this.vram = this.vram2;
         }
         else {
@@ -2567,11 +2592,6 @@ class MMU {
       this.ie = value;
     }
 
-    // Ext. RAM bank number
-    else if (loc >= 0x4000 && loc <= 0x5fff) {
-      this.ramBankNum1 = value & 0x0f;
-    }
-
     // Video RAM
     else if (loc >= 0x8000 && loc <= 0x9fff) {
       this.vram[loc - 0x8000] = value;
@@ -2580,7 +2600,7 @@ class MMU {
     // Ext. RAM
     else if (loc >= 0xa000 && loc <= 0xbfff) {
       if (this.xramEnabled) {
-        this.xram[(loc - 0xa000) + (16384 * this.ramBankNum1 - 1)] = value;
+        this.xram[(loc - 0xa000) + this.xramOffset] = value;
       }
     }
 
@@ -2596,40 +2616,51 @@ class MMU {
 
     // Memory bank switching is a work in progress!
 
-    // MBC1
+    // MBC1 registers
     else if (this.mbcType === MMU.MBC1) {
-      // MBC1: 0000-1FFF - RAM Enable
+      // 0000-1FFF - RAM Enable
       if (loc >= 0x0000 && loc <= 0x1fff) {
         this.xramEnabled = (value & 0xa) ? true : false;
       }
-      // MBC1: 2000-3FFF - ROM Bank Number
+      // 2000-3FFF - ROM Bank Number
       else if (loc >= 0x2000 && loc <= 0x3fff) {
-        this.romBankNum1 = (value & 0x1f); // bank 0 invalid - should set to 1 instead
+        this.romOffset1 = 16384 * ((value - 1) & 0x1f);
       }
-      // MBC1: 4000-5FFF - RAM Bank Number or Upper Bits of ROM Bank Number
+      // 4000-5FFF - RAM Bank Number or Upper Bits of ROM Bank Number
       else if (loc >= 0x4000 && loc <= 0x5fff) {
-        this.romBankNum2 = value & 0xb11;
+        if (this.romSize >= 1024) {
+          this.romOffset2 = 16384 * (((value - 1) & 0xb11) << 5);
+        }
+        if (this.ramSize > 32) {
+          this.xramOffset = 8192 * (value & 0xb11);
+        }
       }
-      // MBC1: 6000-7FFF - Banking Mode Select
+      // 6000-7FFF - Banking Mode Select
       else if (loc >= 0x6000 && loc <= 0x7fff) {
         this.bankMode = value & 1;
       }
+
     }
 
-    // MBC5
+    // MBC5 registers
     else if (this.mbcType === MMU.MBC5) {
-      // MBC5: 0000-1FFF - RAM Enable
+      // 0000-1FFF - RAM Enable
       if (loc >= 0x0000 && loc <= 0x1fff) {
         this.xramEnabled = (value & 0xa) ? true : false;
       }
-      // MBC5: 2000-2FFF - 8 least significant bits of ROM bank number (Write Only)
+      // 2000-2FFF - 8 least significant bits of ROM bank number (Write Only)
       else if (loc >= 0x2000 && loc <= 0x2fff) {
-        this.romBankNum1 = value;
+        this.romOffset1 = 16384 * ((value & 0xff) - 1);
       }
 
-      // MBC5: 9th bit of ROM bank number
+      // 3000-3fff - 9th bit of ROM bank number
       else if (loc >= 0x3000 && loc <= 0x3fff) {
-        this.romBankNum2 = value & 0x7f;
+        this.romOffset2 = 16384 * ((value & 1) << 9);
+      }
+
+      // 4000-5fff Ext. RAM bank number
+      else if (loc >= 0x4000 && loc <= 0x5fff) {
+        this.xramOffset = 8192 * ((value & 0x0f) - 1);
       }
     }
 
@@ -2638,7 +2669,7 @@ class MMU {
     }
 
     else {
-      //console.warn("Invalid memory address: " + loc);
+      console.warn("Invalid memory address: " + loc);
     }
   }
 
@@ -2650,7 +2681,6 @@ class MMU {
   }
 
   VRAMDMATransfer(value) {
-    console.log('vramdma transfer');
     const src = uint16(this.readByte(MMU.HDMA1), this.readByte(PPU.HDMA2) & ~0x40) & 0x0f; // ignore lower 4 bits
     const dst = uint16(this.readByte(MMU.HDMA3) & ~0xf0, this.readByte(PPU.HDMA4) & ~0x40); // ignore all but bits 12-4
     const length = value & ~0x80;
