@@ -44,6 +44,9 @@ class MMU {
   // CGB only - VRAM bank switch
   static VBK = 0xff4f;
 
+  // CGB only - WRAM bank switch
+  static SVBK = 0xff70;
+
   // CGB type
   static CGB_COMPAT = 0x80;
   static CGB_ONLY = 0xc0;
@@ -71,7 +74,7 @@ class MMU {
     this.xramOffset = 0;
     this.xramEnabled = false;
     this.bankMode = null;
-    this.cgbram = null;
+    this.cram = null;
     this.romSize = 0;
     this.ramSize = 0;
   }
@@ -83,7 +86,7 @@ class MMU {
     this.vram2 = new Uint8Array(8 * 1024);
     this.vram = this.vram1;
     this.xram = new Uint8Array(128 * 1024);
-    this.wram = new Uint8Array(32 * 1024);
+    this.wram = new Uint8Array(40 * 1024); // 4KB and 32KB switchable banks (cgb)
     this.wramOffset = 0;
     this.hram = new Uint8Array(128);
     this.oam = new Uint8Array(160);
@@ -96,7 +99,7 @@ class MMU {
     this.xramOffset = 0;
     this.xramEnabled = false;
     this.bankMode = 0;
-    this.cgbram = new Uint8Array(64);
+    this.cram = new Uint8Array(64);
   }
 
   loadRom(rom) {
@@ -133,7 +136,7 @@ class MMU {
     // Read CGB flag if new license
     if (newLicense) {
       if (header.cgb === MMU.CGB_COMPAT || header.cgb === MMU.CGB_ONLY) {
-        this.dmg.cgbMode = false;
+        this.dmg.cgbMode = true;
       }
     }
 
@@ -217,6 +220,11 @@ class MMU {
       return this.joypad.read();
     }
 
+    // Return currently loaded vram number at bit 0 w/all other bits set to 1
+    else if (this.dmg.cgbMode && loc == MMU.VBK) {
+      return 0xfe | (this.vram == this.vram2);
+    }
+
     else if (loc >= 0xff00 && loc <= 0xff7f) {
       return this.io[loc - 0xff00];
     }
@@ -262,18 +270,20 @@ class MMU {
         this.apu.writeByte(loc, value);
       }
 
-      // CGB only - Start VRAM DMA Transfer
-      else if (this.cgbjode && loc == MMU.HDMA5) {
+      // CGB: - Start VRAM DMA Transfer
+      else if (this.dmg.cgbMode && loc == MMU.HDMA5) {
         this.VRAMDMATransfer(value);
       }
 
+      // CGB: WRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.SVBK) {
-        this.wramOffset = value * 4096;
+        this.wramOffset = ((value & (1 << 3)) * 4096) || 0;
       }
 
+      // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
         // CGB only - Use VRAM2 bank if bit 0 set;
-        if (this.dmg.dmg.cgbMode && (value & 0x1)) {
+        if (value & 0x1) {
           this.vram = this.vram2;
         }
         else {
@@ -281,20 +291,17 @@ class MMU {
         }
       }
 
-      // Capture writes to BCPD/BGPD
+      // CGB: Capture writes to BCPD/BGPD
       else if (this.dmg.cgbMode && loc == MMU.BCPD_BGPD) {
         const bits = this.io[MMU.BCPS_BGPI - 0xff00];
-        const autoIncrement = bits & (1 << 7) !== 0;
-        const index = bits & 0x1f;
+        const autoIncrement = (bits & (1 << 7)) !== 0;
+        const index = bits & 0x3f;
 
-        // Write to CGB palette memory at <index> and <index> + 1
-        this.cgbram[index] = value & 0x0f;
-        this.cgbram[index + 1] = (value & 0xf0) & ~(1 << 7); // bit 7 ignored
+        // Write to CGB palette memory at <index>
+        this.cram[index] = value;
 
-        // Add to index if auto increment set
-        if (autoIncrement) {
-          this.io[MMU.BCPS_BGPI - 0xff00] = (autoIncrement << 7) | (index + 1 & 0x3f);
-        }
+        // If autoIncrement = true then index++
+        this.io[MMU.BCPS_BGPI - 0xff00] = (autoIncrement << 7) | ((index + autoIncrement) & 0x3f);
       }
 
       else {
@@ -385,7 +392,7 @@ class MMU {
 
       // 4000-5fff Ext. RAM bank number
       else if (loc >= 0x4000 && loc <= 0x5fff) {
-        this.xramOffset = 8192 * ((value & 0x0f) - 1);
+        this.xramOffset = 8192 * (value & 0x0f - 1);
       }
     }
 

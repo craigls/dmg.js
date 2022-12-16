@@ -47,7 +47,7 @@ class PPU {
   // Palette
   static DEFAULT_PALETTE = [
     [224, 248, 208],  // lightest
-    [136, 192,112],   // light
+    [136, 192, 112],   // light
     [52, 104,86],     // dark
     [8, 24, 32],      // darkest
   ];
@@ -276,7 +276,6 @@ class PPU {
     const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
     const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
 
-    // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
     const tileNum = xTiles + yTiles * this.bgNumTiles;
 
     return this.mmu.vram[base + tileNum - 0x8000];
@@ -284,12 +283,11 @@ class PPU {
 
   // Get tile data for tile id
   // Each tile uses 16 bytes of memory
-  getTileData(tileIndex) {
+  getTileData(vram, tileIndex) {
 
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    const vram = this.mmu.vram;
     let index;
 
     if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
@@ -311,28 +309,43 @@ class PPU {
     // BG tilemap begins at 0x9800 or 9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
     const tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
-    const tile = this.getTileData(tileIndex);
-    const tileX = (x + this.scrollX) % this.tileSize;
-    const tileY = (y + this.scrollY) % this.tileSize;
-    let rgb;
 
-    // Save color id of pixel x, y for bg/obj priority when rendering sprites
-    this.bgColorId = this.getPixelColor(tile, tileX, tileY);
+    let vram = this.mmu.vram1;
+    let rgb = null;
 
+    // CGB BG palette
     if (this.dmg.cgbMode) {
-      const addr = this.readByte(MMU.BCPD_BGPD);
-      const palette = uint16(this.mmu.cgbram[addr + 1], this.mmu.cgbram[addr]);
+      const bgAttrs = this.mmu.vram2[tileIndex];
+      const palette = this.mmu.cram[(bgAttrs & 2) * 8];
+
+      if (bgAttrs & (1 << 2) !== 0) {
+        vram = this.mmu.vram2;
+      }
 
       // Each color value uses 5 bits
-      rgb = [
-        palette & 0x1f, // red
-        palette & (0x1f >> 5), // green
-        palette & (0x1f >> 10), // blue
+      const rgb555 = [
+        (palette & 0x1f), // red
+        ((palette >> 5) & 0x1f), // green
+        ((palette >> 10) & 0x1f), // blue
       ];
+
+      rgb = [
+        ((rgb555[0] & 0x7) << 5) | rgb555[0],
+        ((rgb555[1] & 0x7) << 5) | rgb555[1],
+        ((rgb555[2] & 0x7) << 5) | rgb555[2],
+      ];
+
     }
     else {
       rgb = this.getColorRGB(this.bgColorId, this.BGP);
     }
+    const tile = this.getTileData(vram, tileIndex);
+    const tileX = (x + this.scrollX) % this.tileSize;
+    const tileY = (y + this.scrollY) % this.tileSize;
+
+    // Save color id of pixel x, y for bg/obj priority when rendering sprites
+    this.bgColorId = this.getPixelColor(tile, tileX, tileY);
+
     this.drawPixel(x, y, rgb);
   }
 
@@ -345,7 +358,7 @@ class PPU {
     const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
     const tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
-    const tile = this.getTileData(tileIndex);
+    const tile = this.getTileData(this.mmu.vram, tileIndex);
     const tileX = (x - this.winX) % this.tileSize;
     const tileY = (y - this.winY) % this.tileSize;
 

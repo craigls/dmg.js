@@ -2319,6 +2319,9 @@ class MMU {
   // CGB only - VRAM bank switch
   static VBK = 0xff4f;
 
+  // CGB only - WRAM bank switch
+  static SVBK = 0xff70;
+
   // CGB type
   static CGB_COMPAT = 0x80;
   static CGB_ONLY = 0xc0;
@@ -2346,7 +2349,7 @@ class MMU {
     this.xramOffset = 0;
     this.xramEnabled = false;
     this.bankMode = null;
-    this.cgbram = null;
+    this.cram = null;
     this.romSize = 0;
     this.ramSize = 0;
   }
@@ -2358,7 +2361,7 @@ class MMU {
     this.vram2 = new Uint8Array(8 * 1024);
     this.vram = this.vram1;
     this.xram = new Uint8Array(128 * 1024);
-    this.wram = new Uint8Array(32 * 1024);
+    this.wram = new Uint8Array(40 * 1024); // 4KB and 32KB switchable banks (cgb)
     this.wramOffset = 0;
     this.hram = new Uint8Array(128);
     this.oam = new Uint8Array(160);
@@ -2371,7 +2374,7 @@ class MMU {
     this.xramOffset = 0;
     this.xramEnabled = false;
     this.bankMode = 0;
-    this.cgbram = new Uint8Array(64);
+    this.cram = new Uint8Array(64);
   }
 
   loadRom(rom) {
@@ -2408,7 +2411,7 @@ class MMU {
     // Read CGB flag if new license
     if (newLicense) {
       if (header.cgb === MMU.CGB_COMPAT || header.cgb === MMU.CGB_ONLY) {
-        this.dmg.cgbMode = false;
+        this.dmg.cgbMode = true;
       }
     }
 
@@ -2492,6 +2495,11 @@ class MMU {
       return this.joypad.read();
     }
 
+    // Return currently loaded vram number at bit 0 w/all other bits set to 1
+    else if (this.dmg.cgbMode && loc == MMU.VBK) {
+      return 0xfe | (this.vram == this.vram2);
+    }
+
     else if (loc >= 0xff00 && loc <= 0xff7f) {
       return this.io[loc - 0xff00];
     }
@@ -2537,18 +2545,20 @@ class MMU {
         this.apu.writeByte(loc, value);
       }
 
-      // CGB only - Start VRAM DMA Transfer
-      else if (this.cgbjode && loc == MMU.HDMA5) {
+      // CGB: - Start VRAM DMA Transfer
+      else if (this.dmg.cgbMode && loc == MMU.HDMA5) {
         this.VRAMDMATransfer(value);
       }
 
+      // CGB: WRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.SVBK) {
-        this.wramOffset = value * 4096;
+        this.wramOffset = ((value & (1 << 3)) * 4096) || 0;
       }
 
+      // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
         // CGB only - Use VRAM2 bank if bit 0 set;
-        if (this.dmg.dmg.cgbMode && (value & 0x1)) {
+        if (value & 0x1) {
           this.vram = this.vram2;
         }
         else {
@@ -2556,20 +2566,17 @@ class MMU {
         }
       }
 
-      // Capture writes to BCPD/BGPD
+      // CGB: Capture writes to BCPD/BGPD
       else if (this.dmg.cgbMode && loc == MMU.BCPD_BGPD) {
         const bits = this.io[MMU.BCPS_BGPI - 0xff00];
-        const autoIncrement = bits & (1 << 7) !== 0;
-        const index = bits & 0x1f;
+        const autoIncrement = (bits & (1 << 7)) !== 0;
+        const index = bits & 0x3f;
 
-        // Write to CGB palette memory at <index> and <index> + 1
-        this.cgbram[index] = value & 0x0f;
-        this.cgbram[index + 1] = (value & 0xf0) & ~(1 << 7); // bit 7 ignored
+        // Write to CGB palette memory at <index>
+        this.cram[index] = value;
 
-        // Add to index if auto increment set
-        if (autoIncrement) {
-          this.io[MMU.BCPS_BGPI - 0xff00] = (autoIncrement << 7) | (index + 1 & 0x3f);
-        }
+        // If autoIncrement = true then index++
+        this.io[MMU.BCPS_BGPI - 0xff00] = (autoIncrement << 7) | ((index + autoIncrement) & 0x3f);
       }
 
       else {
@@ -2660,7 +2667,7 @@ class MMU {
 
       // 4000-5fff Ext. RAM bank number
       else if (loc >= 0x4000 && loc <= 0x5fff) {
-        this.xramOffset = 8192 * ((value & 0x0f) - 1);
+        this.xramOffset = 8192 * (value & 0x0f - 1);
       }
     }
 
@@ -2743,7 +2750,7 @@ class PPU {
   // Palette
   static DEFAULT_PALETTE = [
     [224, 248, 208],  // lightest
-    [136, 192,112],   // light
+    [136, 192, 112],   // light
     [52, 104,86],     // dark
     [8, 24, 32],      // darkest
   ];
@@ -2972,7 +2979,6 @@ class PPU {
     const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
     const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
 
-    // Get the offset for the tile address. Wraps back to zero if tileNum > 1023
     const tileNum = xTiles + yTiles * this.bgNumTiles;
 
     return this.mmu.vram[base + tileNum - 0x8000];
@@ -2980,12 +2986,11 @@ class PPU {
 
   // Get tile data for tile id
   // Each tile uses 16 bytes of memory
-  getTileData(tileIndex) {
+  getTileData(vram, tileIndex) {
 
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
-    const vram = this.mmu.vram;
     let index;
 
     if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
@@ -3007,28 +3012,43 @@ class PPU {
     // BG tilemap begins at 0x9800 or 9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
     const tileIndex = this.getTileAtCoords(x + this.scrollX, y + this.scrollY, base);
-    const tile = this.getTileData(tileIndex);
-    const tileX = (x + this.scrollX) % this.tileSize;
-    const tileY = (y + this.scrollY) % this.tileSize;
-    let rgb;
 
-    // Save color id of pixel x, y for bg/obj priority when rendering sprites
-    this.bgColorId = this.getPixelColor(tile, tileX, tileY);
+    let vram = this.mmu.vram1;
+    let rgb = null;
 
+    // CGB BG palette
     if (this.dmg.cgbMode) {
-      const addr = this.readByte(MMU.BCPD_BGPD);
-      const palette = uint16(this.mmu.cgbram[addr + 1], this.mmu.cgbram[addr]);
+      const bgAttrs = this.mmu.vram2[tileIndex];
+      const palette = this.mmu.cram[(bgAttrs & 2) * 8];
+
+      if (bgAttrs & (1 << 2) !== 0) {
+        vram = this.mmu.vram2;
+      }
 
       // Each color value uses 5 bits
-      rgb = [
-        palette & 0x1f, // red
-        palette & (0x1f >> 5), // green
-        palette & (0x1f >> 10), // blue
+      const rgb555 = [
+        (palette & 0x1f), // red
+        ((palette >> 5) & 0x1f), // green
+        ((palette >> 10) & 0x1f), // blue
       ];
+
+      rgb = [
+        ((rgb555[0] & 0x7) << 5) | rgb555[0],
+        ((rgb555[1] & 0x7) << 5) | rgb555[1],
+        ((rgb555[2] & 0x7) << 5) | rgb555[2],
+      ];
+
     }
     else {
       rgb = this.getColorRGB(this.bgColorId, this.BGP);
     }
+    const tile = this.getTileData(vram, tileIndex);
+    const tileX = (x + this.scrollX) % this.tileSize;
+    const tileY = (y + this.scrollY) % this.tileSize;
+
+    // Save color id of pixel x, y for bg/obj priority when rendering sprites
+    this.bgColorId = this.getPixelColor(tile, tileX, tileY);
+
     this.drawPixel(x, y, rgb);
   }
 
@@ -3041,7 +3061,7 @@ class PPU {
     const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
     const tileIndex = this.getTileAtCoords(x - this.winX, y - this.winY, base);
-    const tile = this.getTileData(tileIndex);
+    const tile = this.getTileData(this.mmu.vram, tileIndex);
     const tileX = (x - this.winX) % this.tileSize;
     const tileY = (y - this.winY) % this.tileSize;
 
