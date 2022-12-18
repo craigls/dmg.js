@@ -276,17 +276,17 @@ class PPU {
     return this.palette[(palette >> (2 * colorId)) & 0b11];
   }
 
-  // Finds the memory address of tile containing pixel at x, y for tilemap base address
-  getTileAddress(x, y, base) {
+  // Return tile index info for x, y coord from vram bank at base address
+  getTileIndex(x, y, vram, base) {
     const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
     const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
     const tileNum = xTiles + yTiles * this.bgNumTiles;
-    return base + tileNum - 0x8000;
+    return vram[base + tileNum - 0x8000];
   }
 
-  // Get tile data for tile id
+  // Get tile data for tile id from vram bank
   // Each tile uses 16 bytes of memory
-  getTileData(vram, tileIndex) {
+  getTileData(tileIndex, vram) {
 
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
@@ -308,28 +308,26 @@ class PPU {
   }
 
   cgbDrawBackground(x, y) {
-    let vram = this.mmu.vram1;
+    let vram = this.mmu.vram;
 
     // BG tilemap begins at 0x9800 or 0x9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    const tileAddress = this.getTileAddress(x + this.scrollX, y + this.scrollY, base);
+    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
 
     // CGB BG attributes
     const cram = this.mmu.cram;
-    const bgAttrs = this.mmu.vram2[tileAddress];
+    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
     const paletteAddr = (bgAttrs & 0x7) * 8;
 
     // Switch vrma2
     if ((bgAttrs & (1 << 3)) !== 0) {
       vram = this.mmu.vram2;
     }
-    const tileIndex = this.mmu.vram1[tileAddress];
-    const tile = this.getTileData(vram, tileIndex);
+    const tile = this.getTileData(tileIndex, vram);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
 
     const bgColorId = this.getPixelColorId(tile, tileX, tileY);
-
     const color = uint16(cram[paletteAddr + bgColorId + 1], cram[paletteAddr + bgColorId]) & ~(1 << 15);
 
     // Each color value uses 5 bits
@@ -349,9 +347,8 @@ class PPU {
   drawBackground(x, y) {
     // BG tilemap begins at 0x9800 or 0x9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    const tileAddress = this.getTileAddress(x + this.scrollX, y + this.scrollY, base);
-    const tileIndex = this.mmu.vram[tileAddress];
-    const tile = this.getTileData(this.mmu.vram, tileIndex);
+    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram, base);
+    const tile = this.getTileData(tileIndex, this.mmu.vram);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
     const bgColorId = this.getPixelColorId(tile, tileX, tileY);
@@ -371,9 +368,8 @@ class PPU {
     // Window tilemap begins at 0x9800 or 9c000
     const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
-    const tileAddress = this.getTileAddress(x - this.winX, y - this.winY, base);
-    const tileIndex = this.mmu.vram[tileAddress];
-    const tile = this.getTileData(this.mmu.vram, tileIndex);
+    const tileIndex = this.getTileIndex(x - this.winX, y - this.winY, this.mmu.vram, base);
+    const tile = this.getTileData(tileIndex, this.mmu.vram);
     const tileX = (x - this.winX) % this.tileSize;
     const tileY = (y - this.winY) % this.tileSize;
 
