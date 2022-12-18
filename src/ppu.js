@@ -320,10 +320,10 @@ class PPU {
     const paletteAddr = (bgAttrs & 0x7) * 8;
 
     // Switch vrma2
-    if (bgAttrs & (1 << 3) !== 0) {
+    if ((bgAttrs & (1 << 3)) !== 0) {
       vram = this.mmu.vram2;
     }
-    const tileIndex = this.mmu.vram[tileAddress];
+    const tileIndex = this.mmu.vram1[tileAddress];
     const tile = this.getTileData(vram, tileIndex);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
@@ -385,7 +385,7 @@ class PPU {
   // Get color id of tile data at pixel x,y
   getPixelColorId(tile, x, y) {
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
-    //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
+    //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF];
     const left = tile[y * 2];
     const right = tile[(y * 2) + 1];
     const bit = 1 << 7 - x;

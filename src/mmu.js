@@ -103,12 +103,22 @@ class MMU {
   }
 
   loadRom(rom) {
-    const header = this.readHeader(rom);
+    // Cartridge header info
+    this.title = getText(rom.slice(0x0134, 0x0144));
+    this.mfr = getText(rom.slice(0x013f, 0x0143));
+    this.cgb = rom[0x0143];
+    this.sgb = rom[0x0146];
+    this.mbc = rom[0x0147];
+    this.region = rom[0x014a];
+    this.license = rom[0x014b];
+    this.ver = rom[0x014c];
+    this.checksum1 = rom[0x014d];
+    this.checksum2 = rom.slice(0x014e, 0x0150);
 
     // Determine ROM and RAM sizes (KiB)
-    this.romSize = 32 * (1 << header.ramSize);
+    this.romSize = 32 * (1 << rom[0x0148]);
 
-    switch (header.ramSize) {
+    switch (rom[0x0149]) {
       case 0x00:
       case 0x01: // unused
         this.ramSize = 0;
@@ -126,7 +136,7 @@ class MMU {
         this.ramSize = 64;
         break;
       default:
-        console.warning("Can't determine RAM size from header");
+        console.error("Can't determine RAM size from header");
         break;
     }
 
@@ -135,13 +145,13 @@ class MMU {
 
     // Read CGB flag if new license
     if (newLicense) {
-      if (header.cgb === MMU.CGB_COMPAT || header.cgb === MMU.CGB_ONLY) {
+      if (rom[0x0143] === MMU.CGB_COMPAT || rom[0x0143] === MMU.CGB_ONLY) {
         this.dmg.cgbMode = true;
       }
     }
 
     // Set MBC type
-    switch (header.mbc) {
+    switch (rom[0x0147]) {
       case 0x00:
         this.mbcType = MMU.MBC0;
         break;
@@ -160,27 +170,11 @@ class MMU {
         break;
       default:
         // HACK: Assume MBC1 for now
+        console.log("MBC not implemented:" + rom[0x0147]);
         this.mbcType = MMU.MBC1;
         break;
     }
     this.rom = new Uint8Array(rom);
-  }
-
-  readHeader(rom) {
-    return {
-      title: getText(rom.slice(0x0134, 0x0144)),
-      mfr: getText(rom.slice(0x013f, 0x0143)),
-      cgb: rom[0x0143],
-      sgb: rom[0x0146],
-      mbc: rom[0x0147],
-      romSize: rom[0x0148],
-      ramSize: rom[0x0148],
-      region: rom[0x014a],
-      license: rom[0x014b],
-      ver: rom[0x014c],
-      checksum1: rom[0x014d],
-      checksum2: rom.slice(0x014e, 0x0150),
-    };
   }
 
   readByte(loc) {
@@ -260,7 +254,6 @@ class MMU {
   }
 
   writeByte(loc, value) {
-    // IO registers
     if (loc == MMU.JOYP) {
       this.joypad.write(value);
     }
@@ -283,7 +276,7 @@ class MMU {
       // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
         // CGB only - Use VRAM2 bank if bit 0 set;
-        if (value & 0x1) {
+        if (value & 0x01) {
           this.vram = this.vram2;
         }
         else {
@@ -392,7 +385,7 @@ class MMU {
 
       // 4000-5fff Ext. RAM bank number
       else if (loc >= 0x4000 && loc <= 0x5fff) {
-        this.xramOffset = 8192 * (value & 0x0f - 1);
+        this.xramOffset = 8192 * (value & 0x0f);
       }
     }
 
