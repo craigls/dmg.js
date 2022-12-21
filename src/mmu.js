@@ -86,7 +86,7 @@ class MMU {
     this.vram2 = new Uint8Array(8 * 1024);
     this.vram = this.vram1;
     this.xram = new Uint8Array(128 * 1024);
-    this.wram = new Uint8Array(40 * 1024); // 4KB and 32KB switchable banks (cgb)
+    this.wram = new Uint8Array(8 * 4096); // 4kb + 7x 4kb switchable banks (cgb)
     this.wramOffset = 0;
     this.hram = new Uint8Array(128);
     this.oam = new Uint8Array(160);
@@ -146,7 +146,7 @@ class MMU {
     // Read CGB flag if new license
     if (newLicense) {
       if (rom[0x0143] === MMU.CGB_COMPAT || rom[0x0143] === MMU.CGB_ONLY) {
-        this.dmg.cgbMode = true;
+        this.dmg.cgbEnable();
       }
     }
 

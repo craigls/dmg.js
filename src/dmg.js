@@ -19,7 +19,6 @@ class DMG {
   }
 
   constructor() {
-    this.cgbMode = false;
     this.cpu = null;
     this.ppu = null;
     this.apu = null;
@@ -29,10 +28,11 @@ class DMG {
     this.screen = null;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
-    this.cgbEnabled = true;
+    this.cgbMode = false;
   }
 
   reset() {
+    this.cgbMode = false;
     this.cycles = 0;
     this.frames = 0;
     this.cpu.reset();
@@ -79,12 +79,7 @@ class DMG {
     const DE = 0x00d8;
     const HL = 0x014d;
 
-    if (this.cgbEnabled) { // CGB hardware enabled
-      this.cpu.A = 0x11;
-    }
-    else {
-      this.cpu.A = AF >> 8;
-    }
+    this.cpu.A = AF >> 8;
     this.cpu.F = AF & 0xff;
     this.cpu.B = BC >> 8;
     this.cpu.C = BC & 0xff;
@@ -100,6 +95,12 @@ class DMG {
   loadRom(rom) {
     this.reset();
     this.mmu.loadRom(rom);
+  }
+
+  cgbEnable() {
+    // Set A=0x11 to allow ROM to access to CGB hardware
+    this.cpu.A = 0x11;
+    this.cgbMode = true;
   }
 
   start() {

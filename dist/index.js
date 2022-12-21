@@ -29,35 +29,6 @@ function getText(charCodes) {
   return charCodes.reduce((acc, cur) => acc + ((cur > 0) ? String.fromCharCode(cur) : ''), '');
 }
 
-
-function palette(rgb) {
-  let count = 0;
-  let x = 0;
-  let y = 0;
-  for (let i = 0; i < 8; i++) {
-    x = 0;
-    for (let c = 0; c < 4; c++) {
-      count++;
-      const d = c * 2;
-      const lo = window.dmg.mmu.cram[(i * 8) + d];
-      const hi = window.dmg.mmu.cram[(i * 8) + d + 1];
-      const color = uint16(hi, lo);
-      const rgb = [
-        (color & 0x1f) << 3,
-        ((color >> 5) & 0x1f) << 3,
-        ((color >> 10) & 0x1f) << 3,
-      ];
-      window.dmg.screen.ctx.fillStyle = 'rgb(' + rgb.join(',') + ')';
-      window.dmg.screen.ctx.fillRect(x * 14, y, 10, 2);
-      console.log(i, c, hexify(color));
-      x++;
-    }
-    y += 4;
-  }
-  console.log(count);
-}
-window.palette = palette;
-
 window.hexify = hexify;
 window.tcBin2Dec = tcBin2Dec;
 window.uint16 = uint16;
@@ -2390,7 +2361,7 @@ class MMU {
     this.vram2 = new Uint8Array(8 * 1024);
     this.vram = this.vram1;
     this.xram = new Uint8Array(128 * 1024);
-    this.wram = new Uint8Array(40 * 1024); // 4KB and 32KB switchable banks (cgb)
+    this.wram = new Uint8Array(8 * 4096); // 4kb + 7x 4kb switchable banks (cgb)
     this.wramOffset = 0;
     this.hram = new Uint8Array(128);
     this.oam = new Uint8Array(160);
@@ -2407,12 +2378,22 @@ class MMU {
   }
 
   loadRom(rom) {
-    const header = this.readHeader(rom);
+    // Cartridge header info
+    this.title = getText(rom.slice(0x0134, 0x0144));
+    this.mfr = getText(rom.slice(0x013f, 0x0143));
+    this.cgb = rom[0x0143];
+    this.sgb = rom[0x0146];
+    this.mbc = rom[0x0147];
+    this.region = rom[0x014a];
+    this.license = rom[0x014b];
+    this.ver = rom[0x014c];
+    this.checksum1 = rom[0x014d];
+    this.checksum2 = rom.slice(0x014e, 0x0150);
 
     // Determine ROM and RAM sizes (KiB)
-    this.romSize = 32 * (1 << header.ramSize);
+    this.romSize = 32 * (1 << rom[0x0148]);
 
-    switch (header.ramSize) {
+    switch (rom[0x0149]) {
       case 0x00:
       case 0x01: // unused
         this.ramSize = 0;
@@ -2430,7 +2411,7 @@ class MMU {
         this.ramSize = 64;
         break;
       default:
-        console.warning("Can't determine RAM size from header");
+        console.error("Can't determine RAM size from header");
         break;
     }
 
@@ -2439,13 +2420,13 @@ class MMU {
 
     // Read CGB flag if new license
     if (newLicense) {
-      if (header.cgb === MMU.CGB_COMPAT || header.cgb === MMU.CGB_ONLY) {
-        this.dmg.cgbMode = true;
+      if (rom[0x0143] === MMU.CGB_COMPAT || rom[0x0143] === MMU.CGB_ONLY) {
+        this.dmg.cgbEnable();
       }
     }
 
     // Set MBC type
-    switch (header.mbc) {
+    switch (rom[0x0147]) {
       case 0x00:
         this.mbcType = MMU.MBC0;
         break;
@@ -2464,27 +2445,11 @@ class MMU {
         break;
       default:
         // HACK: Assume MBC1 for now
+        console.log("MBC not implemented:" + rom[0x0147]);
         this.mbcType = MMU.MBC1;
         break;
     }
     this.rom = new Uint8Array(rom);
-  }
-
-  readHeader(rom) {
-    return {
-      title: getText(rom.slice(0x0134, 0x0144)),
-      mfr: getText(rom.slice(0x013f, 0x0143)),
-      cgb: rom[0x0143],
-      sgb: rom[0x0146],
-      mbc: rom[0x0147],
-      romSize: rom[0x0148],
-      ramSize: rom[0x0148],
-      region: rom[0x014a],
-      license: rom[0x014b],
-      ver: rom[0x014c],
-      checksum1: rom[0x014d],
-      checksum2: rom.slice(0x014e, 0x0150),
-    };
   }
 
   readByte(loc) {
@@ -2564,7 +2529,6 @@ class MMU {
   }
 
   writeByte(loc, value) {
-    // IO registers
     if (loc == MMU.JOYP) {
       this.joypad.write(value);
     }
@@ -2587,7 +2551,7 @@ class MMU {
       // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
         // CGB only - Use VRAM2 bank if bit 0 set;
-        if (value & 0x1) {
+        if (value & 0x01) {
           this.vram = this.vram2;
         }
         else {
@@ -2696,7 +2660,7 @@ class MMU {
 
       // 4000-5fff Ext. RAM bank number
       else if (loc >= 0x4000 && loc <= 0x5fff) {
-        this.xramOffset = 8192 * (value & 0x0f - 1);
+        this.xramOffset = 8192 * (value & 0x0f);
       }
     }
 
@@ -3008,17 +2972,17 @@ class PPU {
     return this.palette[(palette >> (2 * colorId)) & 0b11];
   }
 
-  // Finds the memory address of tile containing pixel at x, y for tilemap base address
-  getTileAddress(x, y, base) {
+  // Return tile index info for x, y coord from vram bank at base address
+  getTileIndex(x, y, vram, base) {
     const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
     const xTiles = Math.floor(x / this.tileSize) % this.bgNumTiles;
     const tileNum = xTiles + yTiles * this.bgNumTiles;
-    return base + tileNum - 0x8000;
+    return vram[base + tileNum - 0x8000];
   }
 
-  // Get tile data for tile id
+  // Get tile data for tile id from vram bank
   // Each tile uses 16 bytes of memory
-  getTileData(vram, tileIndex) {
+  getTileData(tileIndex, vram) {
 
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
@@ -3040,32 +3004,29 @@ class PPU {
   }
 
   cgbDrawBackground(x, y) {
-    let vram = this.mmu.vram1;
+    let vram = this.mmu.vram;
 
     // BG tilemap begins at 0x9800 or 0x9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    const tileAddress = this.getTileAddress(x + this.scrollX, y + this.scrollY, base);
+    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
 
     // CGB BG attributes
     const cram = this.mmu.cram;
-    const bgAttrs = this.mmu.vram2[tileAddress];
+    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
     const paletteAddr = (bgAttrs & 0x7) * 8;
 
     // Switch vrma2
-    if (bgAttrs & (1 << 3) !== 0) {
+    if ((bgAttrs & (1 << 3)) !== 0) {
       vram = this.mmu.vram2;
     }
-    const tileIndex = this.mmu.vram[tileAddress];
-    const tile = this.getTileData(vram, tileIndex);
+    const tile = this.getTileData(tileIndex, vram);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
 
     const bgColorId = this.getPixelColorId(tile, tileX, tileY);
-
     const color = uint16(cram[paletteAddr + bgColorId + 1], cram[paletteAddr + bgColorId]) & ~(1 << 15);
 
-    // Each color value uses 5 bits (0x00-0x1f)
-    // Convert to 8 bit rgb value
+    // Each color value uses 5 bits
     const rgb = [
       (color & 0x1f) << 3,
       ((color >> 5) & 0x1f) << 3,
@@ -3082,9 +3043,8 @@ class PPU {
   drawBackground(x, y) {
     // BG tilemap begins at 0x9800 or 0x9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    const tileAddress = this.getTileAddress(x + this.scrollX, y + this.scrollY, base);
-    const tileIndex = this.mmu.vram[tileAddress];
-    const tile = this.getTileData(this.mmu.vram, tileIndex);
+    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram, base);
+    const tile = this.getTileData(tileIndex, this.mmu.vram);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
     const bgColorId = this.getPixelColorId(tile, tileX, tileY);
@@ -3104,9 +3064,8 @@ class PPU {
     // Window tilemap begins at 0x9800 or 9c000
     const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
-    const tileAddress = this.getTileAddress(x - this.winX, y - this.winY, base);
-    const tileIndex = this.mmu.vram[tileAddress];
-    const tile = this.getTileData(this.mmu.vram, tileIndex);
+    const tileIndex = this.getTileIndex(x - this.winX, y - this.winY, this.mmu.vram, base);
+    const tile = this.getTileData(tileIndex, this.mmu.vram);
     const tileX = (x - this.winX) % this.tileSize;
     const tileY = (y - this.winY) % this.tileSize;
 
@@ -3118,7 +3077,7 @@ class PPU {
   // Get color id of tile data at pixel x,y
   getPixelColorId(tile, x, y) {
     // test tile from https://www.huderlem.com/demos/gameboy2bpp.html
-    //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF]
+    //tile = [0xFF, 0x00, 0x7E, 0xFF, 0x85, 0x81, 0x89, 0x83, 0x93, 0x85, 0xA5, 0x8B, 0xC9, 0x97, 0x7E, 0xFF];
     const left = tile[y * 2];
     const right = tile[(y * 2) + 1];
     const bit = 1 << 7 - x;
@@ -3951,7 +3910,6 @@ class DMG {
   }
 
   constructor() {
-    this.cgbMode = false;
     this.cpu = null;
     this.ppu = null;
     this.apu = null;
@@ -3961,10 +3919,11 @@ class DMG {
     this.screen = null;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
-    this.cgbEnabled = true;
+    this.cgbMode = false;
   }
 
   reset() {
+    this.cgbMode = false;
     this.cycles = 0;
     this.frames = 0;
     this.cpu.reset();
@@ -4011,12 +3970,7 @@ class DMG {
     const DE = 0x00d8;
     const HL = 0x014d;
 
-    if (this.cgbEnabled) { // CGB hardware enabled
-      this.cpu.A = 0x11;
-    }
-    else {
-      this.cpu.A = AF >> 8;
-    }
+    this.cpu.A = AF >> 8;
     this.cpu.F = AF & 0xff;
     this.cpu.B = BC >> 8;
     this.cpu.C = BC & 0xff;
@@ -4032,6 +3986,12 @@ class DMG {
   loadRom(rom) {
     this.reset();
     this.mmu.loadRom(rom);
+  }
+
+  cgbEnable() {
+    // Set A=0x11 to allow ROM to access to CGB hardware
+    this.cpu.A = 0x11;
+    this.cgbMode = true;
   }
 
   start() {
