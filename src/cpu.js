@@ -950,6 +950,7 @@ class CPU {
   }
 
   // Execute instructions
+  // op code comments generated using https://github.com/lmmendes/game-boy-opcodes
   execute(code) {
     const op = this.decode(code);
     let cbop;
@@ -991,6 +992,13 @@ class CPU {
       case 0x09:
         [this.H, this.L] = this.ADD16(this.H, this.L, this.B, this.C);
         this.cycles += 8;
+        break;
+
+      // 0x76  STOP length: 1  cycles: 4  flags: ----  group: control/misc
+      case 0x10:
+        if (this.dmg.cgbMode) {
+          console.log('STOP');
+        }
         break;
 
       // 0x19  ADD HL,DE  length: 1  cycles: 8  flags: -0HC  group: x16/alu
@@ -2144,7 +2152,7 @@ class CPU {
         break;
 
       default:
-        throw Error(hexify(code) + ' not found (pc=' + this.PC + ' next=' + hexify(this.readByte(this.PC + 1)) + ')');
+        throw Error(hexify(this.code) + ' not found (PC=' + this.PC + ' next=' + hexify(this.readByte(this.PC + 1)) + ')');
     }
     return this.cycles;
   }
@@ -2227,3 +2235,4 @@ class CPU {
     return this.cycles;
   }
 }
+window.CPU = CPU;

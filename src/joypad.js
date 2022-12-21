@@ -65,3 +65,4 @@ class Joypad {
     return this.buttons[this.select];
   }
 }
+window.Joypad = Joypad;

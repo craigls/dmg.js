@@ -28,9 +28,11 @@ class DMG {
     this.screen = null;
     this.cyclesPerFrame = DMG.CYCLES_PER_FRAME;
     this.started = false;
+    this.cgbMode = false;
   }
 
   reset() {
+    this.cgbMode = false;
     this.cycles = 0;
     this.frames = 0;
     this.cpu.reset();
@@ -87,11 +89,18 @@ class DMG {
     this.cpu.L = HL & 0xff;
     this.cpu.SP = 0xfffe;
     this.cpu.PC = 0x100; // Skip checksum routines and begin at ROM address 0x100
+
   }
 
   loadRom(rom) {
     this.reset();
     this.mmu.loadRom(rom);
+  }
+
+  cgbEnable() {
+    // Set A=0x11 to allow ROM to access to CGB hardware
+    this.cpu.A = 0x11;
+    this.cgbMode = true;
   }
 
   start() {
@@ -126,7 +135,7 @@ class DMG {
     }
   }
 }
-
+window.DMG = DMG;
 
 // TODO: Clean up this code
 
