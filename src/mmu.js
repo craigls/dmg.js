@@ -35,7 +35,7 @@ class MMU {
   // CGB only - palette registers
   static BCPS_BGPI = 0xff68;
   static BCPD_BGPD = 0xff69;
-  static OCPS_OPBI = 0xff6a;
+  static OCPS_OBPI = 0xff6a;
   static OCPD_OBPD = 0xff6b;
 
   // CGB only - KEY1 speed switch
@@ -74,7 +74,8 @@ class MMU {
     this.xramOffset = 0;
     this.xramEnabled = false;
     this.bankMode = null;
-    this.cram = null;
+    this.bgPalette = null;
+    this.objPalette = null;
     this.romSize = 0;
     this.ramSize = 0;
   }
@@ -98,8 +99,8 @@ class MMU {
     this.wramOffset = 0;
     this.xramOffset = 0;
     this.xramEnabled = false;
-    this.bankMode = 0;
-    this.cram = new Uint8Array(64);
+    this.bgPalette = new Uint8Array(64);
+    this.objPalette = new Uint8Array(64);
   }
 
   loadRom(rom) {
@@ -291,10 +292,23 @@ class MMU {
         const index = bits & 0x3f;
 
         // Write to CGB palette memory at <index>
-        this.cram[index] = value;
+        this.bgPalette[index] = value;
 
         // If autoIncrement = true then index++
         this.io[MMU.BCPS_BGPI - 0xff00] = (autoIncrement << 7) | ((index + autoIncrement) & 0x3f);
+      }
+
+      // CGB: Capture writes to OCPD/OBPD
+      else if (this.dmg.cgbMode && loc == MMU.OCPD_OBPD) {
+        const bits = this.io[MMU.OCPS_OBPI - 0xff00];
+        const autoIncrement = (bits & (1 << 7)) !== 0;
+        const index = bits & 0x3f;
+
+        // Write to CGB palette memory at <index>
+        this.objPalette[index] = value;
+
+        // If autoIncrement = true then index++
+        this.io[MMU.OCPS_OBPI - 0xff00] = (autoIncrement << 7) | ((index + autoIncrement) & 0x3f);
       }
 
       else {

@@ -276,6 +276,18 @@ class PPU {
     return this.palette[(palette >> (2 * colorId)) & 0b11];
   }
 
+  cgbGetColorRGB(colorId, paletteId, ram) {
+    const offset = paletteId * 8 + colorId * 2;
+    const color = uint16(ram[offset + 1], ram[offset]) & ~(1 << 15);
+
+    // Each color value uses 5 bits
+    return [
+      (color & 0x1f) << 3,
+      ((color >> 5) & 0x1f) << 3,
+      ((color >> 10) & 0x1f) << 3,
+    ];
+  }
+
   // Return tile index info for x, y coord from vram bank at base address
   getTileIndex(x, y, vram, base) {
     const yTiles = Math.floor(y / this.tileSize) % this.bgNumTiles;
@@ -291,6 +303,7 @@ class PPU {
     // When bg/win flag is NOT set:
     //  tiles 0-127   -> address range 0x9000 - 0x97ff
     //  tiles 128-255 -> address range 0x8800 - 0x8fff
+    const tile = new Uint8Array(16);
     let index;
 
     if (this.LCDC & PPU.LCDC_BGWIN_TILEDATA) {
@@ -302,9 +315,9 @@ class PPU {
       index = 0x1000 + (16 * tcBin2Dec(tileIndex)); // Use signed tile index
     }
     for (let offset = 0; offset < 16; offset++) {
-      this.tileData[offset] = vram[index + offset]; // Faster to access vram array directly
+      tile[offset] = vram[index + offset]; // Faster to access vram array directly
     }
-    return this.tileData;
+    return tile;
   }
 
   cgbDrawBackground(x, y) {
@@ -315,9 +328,8 @@ class PPU {
     const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
 
     // CGB BG attributes
-    const cram = this.mmu.cram;
     const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
-    const paletteAddr = (bgAttrs & 0x7) * 8;
+    const paletteId = (bgAttrs & 0x7);
 
     // Switch vrma2
     if ((bgAttrs & (1 << 3)) !== 0) {
@@ -328,14 +340,7 @@ class PPU {
     const tileY = (y + this.scrollY) % this.tileSize;
 
     const bgColorId = this.getPixelColorId(tile, tileX, tileY);
-    const color = uint16(cram[paletteAddr + bgColorId + 1], cram[paletteAddr + bgColorId]) & ~(1 << 15);
-
-    // Each color value uses 5 bits
-    const rgb = [
-      (color & 0x1f) << 3,
-      ((color >> 5) & 0x1f) << 3,
-      ((color >> 10) & 0x1f) << 3,
-    ];
+    const rgb = this.cgbGetColorRGB(bgColorId, paletteId, this.mmu.bgPalette);
 
     this.drawPixel(x, y, rgb);
 
@@ -369,13 +374,29 @@ class PPU {
     const base = this.LCDC & PPU.LCDC_WIN_TILEMAP ? 0x9c00 : 0x9800;
 
     const tileIndex = this.getTileIndex(x - this.winX, y - this.winY, this.mmu.vram, base);
-    const tile = this.getTileData(tileIndex, this.mmu.vram);
     const tileX = (x - this.winX) % this.tileSize;
     const tileY = (y - this.winY) % this.tileSize;
 
-    const colorId = this.getPixelColorId(tile, tileX, tileY);
-    const rgb = this.getColorRGB(colorId, this.BGP);
-    this.drawPixel(x, y, rgb);
+    if (this.dmg.cgbMode) {
+      const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
+      const paletteId = (bgAttrs & 0x7);
+      let vram = this.mmu.vram;
+
+      // Switch vram2
+      if ((bgAttrs & (1 << 3)) !== 0) {
+        vram = this.mmu.vram2;
+      }
+      const tile = this.getTileData(tileIndex, vram);
+      const colorId = this.getPixelColorId(tile, tileX, tileY);
+      const rgb = this.cgbGetColorRGB(colorId, paletteId, this.mmu.bgPalette);
+      this.drawPixel(x, y, rgb);
+    }
+    else {
+      const tile = this.getTileData(tileIndex, this.mmu.vram);
+      const colorId = this.getPixelColorId(tile, tileX, tileY);
+      const rgb = this.getColorRGB(colorId, this.BGP);
+      this.drawPixel(x, y, rgb);
+    }
   }
 
   // Get color id of tile data at pixel x,y
@@ -403,24 +424,24 @@ class PPU {
       flipY: flags & (1 << 6) ? true : false,
       flipX: flags & (1 << 5) ? true : false,
       obp: flags & (1 << 4) ? true : false,
-      cgbVramBank: flags & (1 << 3) ? true : false,
-      cgbPalette: flags & 0b11,
+      cgbVramBank1: flags & (1 << 3) ? true : false,
+      cgbPaletteId: flags & 0b11,
       oamAddress: offset,
       oamIndex: index,
     };
   }
 
-  getSpriteData(spriteIndex) {
-    const vram = this.mmu.vram;
+  getSpriteData(spriteIndex, vram) {
     const end = this.spriteHeight * 2;
+    const sprite = new Uint8Array(32);
     // sprite index: ignore bit 0 when in 8x16 sprite mode
     if (this.spriteHeight === 16) {
       spriteIndex &= ~0x1;
     }
     for (let offset = 0; offset < end; offset++) {
-      this.spriteData[offset] = vram[(spriteIndex * 16) + offset];
+      sprite[offset] = vram[(spriteIndex * 16) + offset];
     }
-    return this.spriteData;
+    return sprite;
   }
 
   getSpritesForLine(line) {
@@ -447,7 +468,11 @@ class PPU {
       const sprite = this.sprites[n];
 
       if (x >= sprite.x - 8 && x < sprite.x) {
-        const tile = this.getSpriteData(sprite.tileIndex);
+        let vram = this.mmu.vram;
+        if (this.dmg.cgbMode && sprite.cgbVramBank1) {
+          vram = this.mmu.vram2;
+        }
+        const tile = this.getSpriteData(sprite.tileIndex, vram);
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
         let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
 
@@ -467,8 +492,14 @@ class PPU {
         if (colorId == 0) {
           continue;
         }
-        const rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
-        this.drawPixel(x, y, rgb);
+        if (this.dmg.cgbMode) {
+          const rgb = this.cgbGetColorRGB(colorId, sprite.cgbPaletteId, this.mmu.objPalette);
+          this.drawPixel(x, y, rgb);
+        }
+        else {
+          const rgb = this.getColorRGB(colorId, this.readByte(sprite.obp ? PPU.OBP1 : PPU.OBP0));
+          this.drawPixel(x, y, rgb);
+        }
       }
     }
   }
