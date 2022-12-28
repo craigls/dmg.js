@@ -321,20 +321,16 @@ class PPU {
   }
 
   cgbDrawBackground(x, y) {
-    let vram = this.mmu.vram;
-
     // BG tilemap begins at 0x9800 or 0x9c000
     const base = this.LCDC & PPU.LCDC_BG_TILEMAP ? 0x9c00 : 0x9800;
-    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
+    const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram, base);
 
     // CGB BG attributes
     const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
     const paletteId = bgAttrs & 0x7;
 
-    // Switch vrma2
-    if ((bgAttrs & (1 << 3)) !== 0) {
-      vram = this.mmu.vram1;
-    }
+    // Check if tile data stored in second VRAM bank
+    const vram = ((bgAttrs & (1 << 3)) !== 0) ? this.mmu.vram1 : this.mmu.vram;
     const tile = this.getTileData(tileIndex, vram);
     const tileX = (x + this.scrollX) % this.tileSize;
     const tileY = (y + this.scrollY) % this.tileSize;
@@ -380,12 +376,9 @@ class PPU {
     if (this.dmg.cgbMode) {
       const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
       const paletteId = bgAttrs & 0x7;
-      let vram = this.mmu.vram;
 
-      // Switch vram1
-      if ((bgAttrs & (1 << 3)) !== 0) {
-        vram = this.mmu.vram1;
-      }
+      // Check if tile data stored in second VRAM bank
+      const vram = ((bgAttrs & (1 << 3)) !== 0) ? this.mmu.vram1 : this.mmu.vram;
       const tile = this.getTileData(tileIndex, vram);
       const colorId = this.getPixelColorId(tile, tileX, tileY);
       const rgb = this.cgbGetColorRGB(colorId, paletteId, this.mmu.bgPalette);
@@ -468,11 +461,9 @@ class PPU {
       const sprite = this.sprites[n];
 
       if (x >= sprite.x - 8 && x < sprite.x) {
-        let vram = this.mmu.vram;
-        if (this.dmg.cgbMode && sprite.cgbVramBank1) {
-          vram = this.mmu.vram1;
-        }
+        const vram = (this.dmg.cgbMode && sprite.cgbVramBank1) ? this.mmu.vram1 : this.mmu.vram;
         const tile = this.getSpriteData(sprite.tileIndex, vram);
+
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8
         let tileY = y - (sprite.y - 16); // sprite.y is vertical position on screen + 16
 
