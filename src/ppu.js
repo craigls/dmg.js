@@ -328,12 +328,12 @@ class PPU {
     const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
 
     // CGB BG attributes
-    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
-    const paletteId = (bgAttrs & 0x7);
+    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
+    const paletteId = bgAttrs & 0x7;
 
     // Switch vrma2
     if ((bgAttrs & (1 << 3)) !== 0) {
-      vram = this.mmu.vram2;
+      vram = this.mmu.vram1;
     }
     const tile = this.getTileData(tileIndex, vram);
     const tileX = (x + this.scrollX) % this.tileSize;
@@ -378,13 +378,13 @@ class PPU {
     const tileY = (y - this.winY) % this.tileSize;
 
     if (this.dmg.cgbMode) {
-      const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
-      const paletteId = (bgAttrs & 0x7);
+      const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
+      const paletteId = bgAttrs & 0x7;
       let vram = this.mmu.vram;
 
-      // Switch vram2
+      // Switch vram1
       if ((bgAttrs & (1 << 3)) !== 0) {
-        vram = this.mmu.vram2;
+        vram = this.mmu.vram1;
       }
       const tile = this.getTileData(tileIndex, vram);
       const colorId = this.getPixelColorId(tile, tileX, tileY);
@@ -470,7 +470,7 @@ class PPU {
       if (x >= sprite.x - 8 && x < sprite.x) {
         let vram = this.mmu.vram;
         if (this.dmg.cgbMode && sprite.cgbVramBank1) {
-          vram = this.mmu.vram2;
+          vram = this.mmu.vram1;
         }
         const tile = this.getSpriteData(sprite.tileIndex, vram);
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8

@@ -2335,8 +2335,8 @@ class MMU {
     this.rom = null;
     this.hram = null;
     this.vram = null;
+    this.vram0 = null;
     this.vram1 = null;
-    this.vram2 = null;
     this.xram = null;
     this.wram = null;
     this.oam = null;
@@ -2358,9 +2358,9 @@ class MMU {
   reset() {
     this.apu = this.dmg.apu;
     this.joypad = this.dmg.joypad;
+    this.vram0 = new Uint8Array(8 * 1024);
     this.vram1 = new Uint8Array(8 * 1024);
-    this.vram2 = new Uint8Array(8 * 1024);
-    this.vram = this.vram1;
+    this.vram = this.vram0;
     this.xram = new Uint8Array(128 * 1024);
     this.wram = new Uint8Array(8 * 4096); // 4kb + 7x 4kb switchable banks (cgb)
     this.wramOffset = 0;
@@ -2492,7 +2492,7 @@ class MMU {
 
     // Return currently loaded vram number at bit 0 w/all other bits set to 1
     else if (this.dmg.cgbMode && loc == MMU.VBK) {
-      return 0xfe | (this.vram == this.vram2);
+      return 0xfe | (this.vram == this.vram1);
     }
 
     else if (loc >= 0xff00 && loc <= 0xff7f) {
@@ -2551,12 +2551,12 @@ class MMU {
 
       // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
-        // CGB only - Use VRAM2 bank if bit 0 set;
+        // CGB only - Use VRAM1 bank if bit 0 set;
         if (value & 0x01) {
-          this.vram = this.vram2;
+          this.vram = this.vram1;
         }
         else {
-          this.vram = this.vram1;
+          this.vram = this.vram0;
         }
       }
 
@@ -3038,12 +3038,12 @@ class PPU {
     const tileIndex = this.getTileIndex(x + this.scrollX, y + this.scrollY, vram, base);
 
     // CGB BG attributes
-    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
-    const paletteId = (bgAttrs & 0x7);
+    const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
+    const paletteId = bgAttrs & 0x7;
 
     // Switch vrma2
     if ((bgAttrs & (1 << 3)) !== 0) {
-      vram = this.mmu.vram2;
+      vram = this.mmu.vram1;
     }
     const tile = this.getTileData(tileIndex, vram);
     const tileX = (x + this.scrollX) % this.tileSize;
@@ -3088,13 +3088,13 @@ class PPU {
     const tileY = (y - this.winY) % this.tileSize;
 
     if (this.dmg.cgbMode) {
-      const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram2, base);
-      const paletteId = (bgAttrs & 0x7);
+      const bgAttrs = this.getTileIndex(x + this.scrollX, y + this.scrollY, this.mmu.vram1, base);
+      const paletteId = bgAttrs & 0x7;
       let vram = this.mmu.vram;
 
-      // Switch vram2
+      // Switch vram1
       if ((bgAttrs & (1 << 3)) !== 0) {
-        vram = this.mmu.vram2;
+        vram = this.mmu.vram1;
       }
       const tile = this.getTileData(tileIndex, vram);
       const colorId = this.getPixelColorId(tile, tileX, tileY);
@@ -3180,7 +3180,7 @@ class PPU {
       if (x >= sprite.x - 8 && x < sprite.x) {
         let vram = this.mmu.vram;
         if (this.dmg.cgbMode && sprite.cgbVramBank1) {
-          vram = this.mmu.vram2;
+          vram = this.mmu.vram1;
         }
         const tile = this.getSpriteData(sprite.tileIndex, vram);
         let tileX = x - (sprite.x - 8); // sprite.x is horizontal position on screen + 8

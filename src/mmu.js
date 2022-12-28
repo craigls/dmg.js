@@ -60,8 +60,8 @@ class MMU {
     this.rom = null;
     this.hram = null;
     this.vram = null;
+    this.vram0 = null;
     this.vram1 = null;
-    this.vram2 = null;
     this.xram = null;
     this.wram = null;
     this.oam = null;
@@ -83,9 +83,9 @@ class MMU {
   reset() {
     this.apu = this.dmg.apu;
     this.joypad = this.dmg.joypad;
+    this.vram0 = new Uint8Array(8 * 1024);
     this.vram1 = new Uint8Array(8 * 1024);
-    this.vram2 = new Uint8Array(8 * 1024);
-    this.vram = this.vram1;
+    this.vram = this.vram0;
     this.xram = new Uint8Array(128 * 1024);
     this.wram = new Uint8Array(8 * 4096); // 4kb + 7x 4kb switchable banks (cgb)
     this.wramOffset = 0;
@@ -217,7 +217,7 @@ class MMU {
 
     // Return currently loaded vram number at bit 0 w/all other bits set to 1
     else if (this.dmg.cgbMode && loc == MMU.VBK) {
-      return 0xfe | (this.vram == this.vram2);
+      return 0xfe | (this.vram == this.vram1);
     }
 
     else if (loc >= 0xff00 && loc <= 0xff7f) {
@@ -276,12 +276,12 @@ class MMU {
 
       // CGB: VRAM bank switching
       else if (this.dmg.cgbMode && loc == MMU.VBK) {
-        // CGB only - Use VRAM2 bank if bit 0 set;
+        // CGB only - Use VRAM1 bank if bit 0 set;
         if (value & 0x01) {
-          this.vram = this.vram2;
+          this.vram = this.vram1;
         }
         else {
-          this.vram = this.vram1;
+          this.vram = this.vram0;
         }
       }
 
