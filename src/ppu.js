@@ -278,13 +278,14 @@ class PPU {
 
   cgbGetColorRGB(colorId, paletteId, ram) {
     const offset = paletteId * 8 + colorId * 2;
-    const color = uint16(ram[offset + 1], ram[offset]) & ~(1 << 15);
+    const color = uint16(ram[offset + 1], ram[offset]);
 
-    // Each color value uses 5 bits
+    // Convert from 15 to 24-bit color
+    // TODO: Is there a better way to do it?
     return [
-      (color & 0x1f) << 3,
-      ((color >> 5) & 0x1f) << 3,
-      ((color >> 10) & 0x1f) << 3,
+      (color & 0x1f) * 8,
+      ((color >> 5) & 0x1f) * 8,
+      ((color >> 10) & 0x1f) * 8,
     ];
   }
 

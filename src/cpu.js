@@ -64,6 +64,7 @@ class CPU {
     this.cycles = 0;
     this.IMEEnabled = false;
     this.haltMode = false;
+    this.doubleSpeedMode = false;
     this.timerCycles = 0;
   }
 
@@ -76,6 +77,7 @@ class CPU {
     this.totalCycles = 0;
     this.timerCycles = 0;
     this.IMEEnabled = false;
+    this.doubleSpeedMode = false;
     this.haltMode = false;
   }
 
@@ -996,8 +998,18 @@ class CPU {
 
       // 0x76  STOP length: 1  cycles: 4  flags: ----  group: control/misc
       case 0x10:
+        // CGB speed switching
         if (this.dmg.cgbMode) {
-          console.log('STOP');
+          const key1 = this.dmg.mmu.readByte(MMU.KEY1);
+
+          const reqSpeed = key1 & (1 << 0);
+          const curSpeed = key1 & (1 << 7);
+
+          // If current speed does not equal requested speed then make the switch
+          if (curSpeed !== reqSpeed) {
+            this.doubleSpeedMode = Boolean(curSpeed & (1 << 7));
+            this.mmu.writeByte(MMU.KEY1, this.doubleSpeedMode | 0);
+          }
         }
         break;
 
